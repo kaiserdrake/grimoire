@@ -18,11 +18,12 @@ function getInitialViewMode() {
 export const TabStateProvider = ({ children }) => {
   // ── List tab ──────────────────────────────────────────────────────────────
   const [listState, setListState] = useState({
-    activeFilter: 'all',
-    search:       '',
-    showSearch:   false,
-    sortBy:       'default',
-    viewMode:     getInitialViewMode(),
+    activeFilters: ['playing', 'backlog', 'wishlist', 'favorite', 'dropped'], // all on by default
+    grouped:       false,
+    search:        '',
+    showSearch:    false,
+    sortBy:        'default',
+    viewMode:      getInitialViewMode(),
   });
 
   // ── Timeline tab ─────────────────────────────────────────────────────────
