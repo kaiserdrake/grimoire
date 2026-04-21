@@ -151,6 +151,15 @@ export const api = {
     get: (key)         => apiFetch(`/api/settings/${key}`),
     set: (key, value)  => apiFetch(`/api/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   },
+
+  // Bulletin board
+  bulletin: {
+    list:       ()       => apiFetch('/api/bulletin'),
+    publish:    (data)   => apiFetch('/api/bulletin', { method: 'POST', body: JSON.stringify(data) }),
+    getContent: (id)     => apiFetch(`/api/bulletin/${id}/content`),
+    delete:     (id)     => apiFetch(`/api/bulletin/${id}`, { method: 'DELETE' }),
+  },
+
 };
 
 export { APIError as default };

@@ -10,6 +10,7 @@ import {
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
 
 import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3 } from 'react-icons/fi';
+import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -489,7 +490,8 @@ export default function NotesPage({ params }) {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [drawerOpen, setDrawerOpen]         = useState(false);
-  const [drawerTab,  setDrawerTab]          = useState('recent'); // 'recent' | 'contents'
+  const [drawerTab,  setDrawerTab]          = useState('recent');
+  const [publishing, setPublishing]         = useState(false);
 
   // ── All persisted via TabStateContext (survives tab switches) ─────────────
   const activePtId   = notesState.activePtId;
@@ -597,6 +599,26 @@ export default function NotesPage({ params }) {
       setContent(newVal);
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => save(newVal), 2000);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!activeFileId) return;
+    setPublishing(true);
+    try {
+      await api.bulletin.publish({ note_file_id: activeFileId });
+      toast({ title: 'Published to bulletin!', status: 'success', duration: 2500 });
+    } catch (err) {
+
+      toast({
+        title: 'Publish failed',
+
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -739,6 +761,20 @@ export default function NotesPage({ params }) {
                     }}>
                     Save
                   </Button> }
+                  {isPresentMode && (
+                  <Button
+                    size="xs"
+                    leftIcon={<TbPin size={12} />}
+                    onClick={handlePublish}
+                    isLoading={publishing}
+                    style={{
+                      background: 'var(--color-bg-subtle)',
+                      color: 'var(--color-text-muted)', border: 'none',
+                    }}
+                  >
+                  Pin
+                  </Button>
+                  )}
                   <Button size="xs"
                     leftIcon={isPresentMode ? <FiEdit3 size={11} /> : <FiEye size={11} />}
                     onClick={() => setIsPresentMode(m => !m)}
