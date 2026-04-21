@@ -8,8 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3 } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiCpu } from 'react-icons/fi';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -22,9 +21,9 @@ import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import { api } from '@/utils/api';
 import { ptSidebarLabel } from '@/utils/playthroughs';
+import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
 
 // ── Markdown editor helpers ───────────────────────────────────────────────────
-
 function insertAtCursor(textarea, before, after = '', placeholder = '') {
   const start = textarea.selectionStart;
   const end   = textarea.selectionEnd;
@@ -35,6 +34,46 @@ function insertAtCursor(textarea, before, after = '', placeholder = '') {
   const newStart = start + before.length;
   const newEnd   = newStart + selected.length;
   textarea.setSelectionRange(newStart, newEnd);
+}
+
+// Inline React component to render a single button (used in picker)
+function GpBtn({ canonical, platform }) {
+  const map = GAMEPAD_MAP[platform] || GAMEPAD_MAP.playstation;
+  const btn = map[canonical] || { glyph: canonical, cls: 'gp-btn-pill' };
+  return <span className={btn.cls}>{btn.glyph}</span>;
+}
+
+// Toolbar picker popover
+function GamepadPicker({ platform, onInsert, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div className="gp-picker" ref={ref}>
+      {PICKER_SECTIONS.map(sec => (
+        <div key={sec.label}>
+          <div className="gp-picker-section">{sec.label}</div>
+          <div className="gp-picker-row">
+            {sec.btns.map(canonical => {
+              const map = GAMEPAD_MAP[platform] || GAMEPAD_MAP.playstation;
+              const btn = map[canonical] || { glyph: canonical, cls: 'gp-btn-pill' };
+              return (
+                <button key={canonical} className="gp-picker-btn"
+                  onMouseDown={(e) => { e.preventDefault(); onInsert(canonical); }}>
+                  <span className={btn.cls}>{btn.glyph}</span>
+                  <span className="gp-picker-label">{canonical}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // ── Image Upload Modal ────────────────────────────────────────────────────────
@@ -213,11 +252,20 @@ function extractHeadings(markdown) {
 }
 
 // ── Markdown toolbar ──────────────────────────────────────────────────────────
-function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal }) {
+function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) {
   const apply = (before, after = '', placeholder = '') => {
     if (!textareaRef.current) return;
     insertAtCursor(textareaRef.current, before, after, placeholder);
     onChange(textareaRef.current.value);
+  };
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerAnchorRef = useRef(null);
+
+  const insertBtn = (canonical) => {
+    if (!textareaRef.current) return;
+    insertAtCursor(textareaRef.current, `:btn[${canonical}]`);
+    onChange(textareaRef.current.value);
+    setPickerOpen(false);
   };
 
   const ITEMS = [
@@ -237,18 +285,27 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal }) {
       ' | cell | cell |\n',
       'cell'
     )},
+    null,
+    { icon: <FiCpu size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o), ref: pickerAnchorRef },
   ];
 
   return (
-    <div className="notes-toolbar">
+    <div className="notes-toolbar" style={{ position: 'relative' }}>
       {ITEMS.map((item, i) =>
         item === null
           ? <div key={i} className="notes-toolbar-sep" />
           : (
             <Tooltip key={i} label={item.label} fontSize="xs" placement="bottom" openDelay={400} hasArrow>
-              <button className="notes-toolbar-btn" onClick={item.action} type="button">{item.icon}</button>
+              <button ref={item.ref || null} className="notes-toolbar-btn" onClick={item.action} type="button">{item.icon}</button>
             </Tooltip>
           )
+      )}
+      {pickerOpen && (
+        <GamepadPicker
+          platform={platform}
+          onInsert={insertBtn}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   );
@@ -260,7 +317,7 @@ function MarkdownHelpModal({ isOpen, onClose }) {
     { heading: 'Text formatting', rows: [['**bold**','Bold'],['*italic*','Italic'],['~~strikethrough~~','Strikethrough'],['`inline code`','Inline code']] },
     { heading: 'Headings',        rows: [['# H1','Heading 1'],['## H2','Heading 2'],['### H3','Heading 3']] },
     { heading: 'Lists',           rows: [['- item','Bullet list'],['1. item','Numbered list'],['- [ ] task','Task list']] },
-    { heading: 'Other',           rows: [['> quote','Blockquote'],['---','Horizontal rule'],['[text](url)','Link'],['![alt](url)','Image'],['| A | B |','Table'],['```code```','Code block']] },
+    { heading: 'Other',           rows: [['> quote','Blockquote'],['---','Horizontal rule'],['[text](url)','Link'],['![alt](url)','Image'],['| A | B |','Table'],[':btn[cross]', 'Gamepad button (canonical name)'],['```code```','Code block']] },
   ];
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="sm">
@@ -685,6 +742,8 @@ export default function NotesPage({ params }) {
   );
 
   const activeFile = activeFileId ? Object.values(filesByPt).flat().find(f => f.id === activeFileId) : null;
+  const activePt = playthroughs.find(p => String(p.id) === String(activePtId));
+  const gamepad  = detectGamepad(activePt?.platform);
 
   return (
     <>
@@ -798,6 +857,7 @@ export default function NotesPage({ params }) {
                       saveTimer.current = setTimeout(() => save(val), 2000);
                     }}
                     onOpenImageModal={() => setImageModalOpen(true)}
+                    platform={gamepad}
                   />
                   <textarea
                     ref={textareaRef}
@@ -818,7 +878,7 @@ export default function NotesPage({ params }) {
                 <div className="notes-preview-content notes-preview-split">
                   {content.trim()
                     ? <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
+                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
                         rehypePlugins={[rehypeRaw]}
                         components={{
                           img: ({ node, ...props }) => (

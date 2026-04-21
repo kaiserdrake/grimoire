@@ -6,6 +6,7 @@ import { FiFileText, FiMap, FiBook, FiTrash2, FiLink } from 'react-icons/fi';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
+import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -50,7 +51,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
     setReadLoading(true);
     try {
       const data = await api.bulletin.getContent(postId);
-      setReadPost({ title: data.title, content: data.content, id: postId });
+      setReadPost({ title: data.title, content: data.content, platform: data.platform });
     } catch {
       setReadPost(null);
     } finally {
@@ -342,7 +343,7 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
 // ── BulletinReadModal ─────────────────────────────────────────────────────────
 function BulletinReadModal({ post, loading, onClose }) {
   const [copied, setCopied] = useState(false);
-
+  const gamepad = detectGamepad(post?.platform);
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}#bulletin-${post.id}`;
@@ -425,7 +426,7 @@ function BulletinReadModal({ post, loading, onClose }) {
 
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (

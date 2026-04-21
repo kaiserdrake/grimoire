@@ -6,6 +6,7 @@ import { FiBook, FiTrash2, FiLink } from 'react-icons/fi';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
+import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
 import { RecentGameRow } from './RecentDrawer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -47,7 +48,7 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
     setReadLoading(true);
     try {
       const data = await api.bulletin.getContent(postId);
-      setReadPost({ title: data.title, content: data.content, id: postId });
+      setReadPost({ title: data.title, content: data.content, platform: data.platform });
     } catch {
       setReadPost(null);
     } finally {
@@ -304,7 +305,7 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
 // ── BulletinReadModal ─────────────────────────────────────────────────────────
 function BulletinReadModal({ post, loading, onClose }) {
   const [copied, setCopied] = useState(false);
-
+  const gamepad = detectGamepad(post?.platform);
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}#bulletin-${post.id}`;
@@ -385,7 +386,7 @@ function BulletinReadModal({ post, loading, onClose }) {
             <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.875rem' }}>Loading…</div>
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (

@@ -1418,10 +1418,10 @@ app.get('/api/bulletin/:id/content', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await query(
-      `SELECT nf.content, nf.title
-
+      `SELECT nf.content, nf.title, p.platform
        FROM bulletin_posts bp
        JOIN note_files nf ON nf.id = bp.note_file_id
+       JOIN playthroughs p ON p.id = nf.playthrough_id
        WHERE bp.id = $1`,
       [id]
     );
