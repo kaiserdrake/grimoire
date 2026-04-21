@@ -45,33 +45,40 @@ function GpBtn({ canonical, platform }) {
 
 // Toolbar picker popover
 function GamepadPicker({ platform, onInsert, onClose }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
   return (
-    <div className="gp-picker" ref={ref}>
-      {PICKER_SECTIONS.map(sec => (
-        <div key={sec.label}>
-          <div className="gp-picker-section">{sec.label}</div>
-          <div className="gp-picker-row">
-            {sec.btns.map(canonical => {
-              const map = GAMEPAD_MAP[platform] || GAMEPAD_MAP.playstation;
-              const btn = map[canonical] || { glyph: canonical, cls: 'gp-btn-pill' };
-              return (
-                <button key={canonical} className="gp-picker-btn"
-                  onMouseDown={(e) => { e.preventDefault(); onInsert(canonical); }}>
-                  <span className={btn.cls}>{btn.glyph}</span>
-                  <span className="gp-picker-label">{canonical}</span>
-                </button>
-              );
-            })}
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backdropFilter: 'blur(2px)',
+      }}
+      onMouseDown={onClose}
+    >
+      <div
+        className="gp-picker"
+        style={{ position: 'static', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        {PICKER_SECTIONS.map(sec => (
+          <div key={sec.label}>
+            <div className="gp-picker-section">{sec.label}</div>
+            <div className="gp-picker-row">
+              {sec.btns.map(canonical => {
+                const map = GAMEPAD_MAP[platform] || GAMEPAD_MAP.playstation;
+                const btn = map[canonical] || { html: `<span class="gp-btn-pill">${canonical}</span>` };
+                return (
+                  <button key={canonical} className="gp-picker-btn"
+                    onMouseDown={(e) => { e.preventDefault(); onInsert(canonical); }}>
+                    <span dangerouslySetInnerHTML={{ __html: btn.html }} />
+                    <span className="gp-picker-label">{canonical}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -259,7 +266,6 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
     onChange(textareaRef.current.value);
   };
   const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerAnchorRef = useRef(null);
 
   const insertBtn = (canonical) => {
     if (!textareaRef.current) return;
@@ -286,7 +292,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
       'cell'
     )},
     null,
-    { icon: <FiCpu size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o), ref: pickerAnchorRef },
+    { icon: <FiCpu size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
   ];
 
   return (
@@ -296,7 +302,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
           ? <div key={i} className="notes-toolbar-sep" />
           : (
             <Tooltip key={i} label={item.label} fontSize="xs" placement="bottom" openDelay={400} hasArrow>
-              <button ref={item.ref || null} className="notes-toolbar-btn" onClick={item.action} type="button">{item.icon}</button>
+              <button className="notes-toolbar-btn" onClick={item.action} type="button">{item.icon}</button>
             </Tooltip>
           )
       )}

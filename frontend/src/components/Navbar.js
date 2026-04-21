@@ -12,6 +12,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import LoginModal from './LoginModal';
 import SettingsModal from './SettingsModal';
 import UserManagementModal from './UserManagementModal';
+import GamepadSprites from './GamepadSprites';
 
 // Lightweight inline MD5 for Gravatar email hashing
 const md5 = (str) => {
@@ -239,6 +240,7 @@ export default function Navbar() {
       {user?.role === 'Admin' && (
         <UserManagementModal isOpen={isUsersOpen} onClose={onUsersClose} />
       )}
+      <GamepadSprites />
     </>
   );
 }

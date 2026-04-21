@@ -517,26 +517,17 @@ body {
   resize: both;
 }
 
-/* ── Gamepad buttons ── */
-.gp-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.6em;
-  height: 1.6em;
-  border-radius: 50%;
-  font-size: 0.78em;
-  font-weight: 700;
-  font-family: inherit;
+/* ── Gamepad icons ── */
+.gp-icon {
+  display: inline-block;
   vertical-align: middle;
-  border: 1.5px solid;
-  line-height: 1;
   flex-shrink: 0;
 }
 .gp-btn-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
   height: 1.5em;
   border-radius: 5px;
   padding: 0 0.45em;
@@ -544,29 +535,11 @@ body {
   font-weight: 700;
   font-family: inherit;
   vertical-align: middle;
-  border: 1.5px solid;
-  line-height: 1;
-  flex-shrink: 0;
+  border: 1.5px solid var(--color-border);
   background: var(--color-bg-subtle);
-
-  border-color: var(--color-border);
   color: var(--color-text-primary);
+  flex-shrink: 0;
 }
-/* PS face buttons */
-.gp-ps-cross    { background:#1a3a6b; border-color:#4a7fc1; color:#7ab4f5; }
-.gp-ps-circle   { background:#6b1a1a; border-color:#c14a4a; color:#f57a7a; }
-.gp-ps-square   { background:#5a1a5a; border-color:#b44ab4; color:#e87ae8; }
-.gp-ps-triangle { background:#0d4a3a; border-color:#2a9a7a; color:#4acfaa; }
-/* Xbox face buttons */
-.gp-xb-a { background:#1a4a1a; border-color:#3a9a3a; color:#6adf6a; }
-.gp-xb-b { background:#6b1a1a; border-color:#c14a4a; color:#f57a7a; }
-.gp-xb-x { background:#1a3a6b; border-color:#4a7fc1; color:#7ab4f5; }
-.gp-xb-y { background:#5a4a0a; border-color:#b4941a; color:#f0c830; }
-/* Switch face buttons */
-.gp-sw-a { background:#6b1a1a; border-color:#c14a4a; color:#f57a7a; }
-.gp-sw-b { background:#5a3a0a; border-color:#c47a1a; color:#f0a840; }
-.gp-sw-x { background:#1a3a6b; border-color:#4a7fc1; color:#7ab4f5; }
-.gp-sw-y { background:#1a4a1a; border-color:#3a9a3a; color:#6adf6a; }
 
 /* ── Gamepad button picker popover ── */
 
