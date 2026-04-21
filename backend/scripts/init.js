@@ -25,6 +25,7 @@ const waitForDb = async () => {
 const createTables = async () => {
   console.log('INIT: Dropping existing tables...');
 
+  await query('DROP TABLE IF EXISTS bulletin_posts CASCADE;');
   await query('DROP TABLE IF EXISTS map_pins CASCADE;');
   await query('DROP TABLE IF EXISTS game_maps CASCADE;');
   await query('DROP TABLE IF EXISTS game_attachments CASCADE;');
@@ -171,6 +172,19 @@ const createTables = async () => {
       description TEXT,
       color       TEXT NOT NULL DEFAULT 'blue',
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+    // ── Bulletin board ─────────────────────────────────────────────────────────
+  await query(`
+    CREATE TABLE bulletin_posts (
+      id            SERIAL PRIMARY KEY,
+      note_file_id  INTEGER NOT NULL REFERENCES note_files(id) ON DELETE CASCADE,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      game_id       INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+      title         TEXT NOT NULL,
+      cover_url     TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
