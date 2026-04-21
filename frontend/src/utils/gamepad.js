@@ -9,118 +9,131 @@ export function detectGamepad(platform) {
   return 'playstation';
 }
 
-function use(id, w = 24, h = 24) {
-  return `<svg class="gp-icon" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><use href="#${id}"/></svg>`;
+// PNG image button — hosted in /public/gamepad/ps/
+function img(path) {
+  return `<img class="gp-img" src="/gamepad/${path}" alt="${path.split('/').pop().replace('.png','').replace(/_/g,' ')}" draggable="false"/>`;
 }
 
+// Neutral pill fallback
 function pill(label) {
   return `<span class="gp-btn-pill">${label}</span>`;
 }
 
 export const GAMEPAD_MAP = {
   playstation: {
-    cross:                { html: use('gp-ps-cross') },
-    circle:               { html: use('gp-ps-circle') },
-
-    square:               { html: use('gp-ps-square') },
-    triangle:             { html: use('gp-ps-triangle') },
-    l1:                   { html: use('gp-shoulder-l1', 48, 28) },
-    r1:                   { html: use('gp-shoulder-r1', 48, 28) },
-    l2:                   { html: use('gp-trigger-l2',  48, 28) },
-    r2:                   { html: use('gp-trigger-r2',  48, 28) },
-    l3:                   { html: use('gp-stick-l3') },
-    r3:                   { html: use('gp-stick-r3') },
-
-    ls:                   { html: use('gp-stick-neutral') },
-    'ls-up':              { html: use('gp-stick-up') },
-    'ls-down':            { html: use('gp-stick-down') },
-    'ls-left':            { html: use('gp-stick-left') },
-    'ls-right':           { html: use('gp-stick-right') },
-    rs:                   { html: use('gp-stick-neutral') },
-    'rs-up':              { html: use('gp-stick-up') },
-    'rs-down':            { html: use('gp-stick-down') },
-    'rs-left':            { html: use('gp-stick-left') },
-    'rs-right':           { html: use('gp-stick-right') },
-
-    up:                   { html: use('gp-dpad-up') },
-    down:                 { html: use('gp-dpad-down') },
-    left:                 { html: use('gp-dpad-left') },
-    right:                { html: use('gp-dpad-right') },
-    options:              { html: use('gp-options') },
-    share:                { html: use('gp-share-ps') },
-    touchpad:             { html: use('gp-touchpad',            52, 32) },
-    'touchpad-left':      { html: use('gp-touchpad-left',       52, 32) },
-    'touchpad-right':     { html: use('gp-touchpad-right',      52, 32) },
-    'touchpad-swipe-up':  { html: use('gp-touchpad-swipe-up',   52, 32) },
-    'touchpad-swipe-down':{ html: use('gp-touchpad-swipe-down', 52, 32) },
+    // Face
+    cross:    { html: img('ps/ps_cross.png') },
+    circle:   { html: img('ps/ps_circle.png') },
+    square:   { html: img('ps/ps_square.png') },
+    triangle: { html: img('ps/ps_triangle.png') },
+    // Shoulders
+    l1:       { html: img('ps/ps_l1.png') },
+    r1:       { html: img('ps/ps_r1.png') },
+    // Triggers
+    l2:       { html: img('ps/ps_l2.png') },
+    r2:       { html: img('ps/ps_r2.png') },
+    // Stick press
+    l3:       { html: img('ps/ps_l3.png') },
+    r3:       { html: img('ps/ps_r3.png') },
+    // Left stick directional
+    ls:          { html: img('ps/ps_l_neutral.png') },
+    'ls-up':     { html: img('ps/ps_l_up.png') },
+    'ls-down':   { html: img('ps/ps_l_down.png') },
+    'ls-left':   { html: img('ps/ps_l_left.png') },
+    'ls-right':  { html: img('ps/ps_l_right.png') },
+    // Right stick directional
+    rs:          { html: img('ps/ps_r_neutral.png') },
+    'rs-up':     { html: img('ps/ps_r_up.png') },
+    'rs-down':   { html: img('ps/ps_r_down.png') },
+    'rs-left':   { html: img('ps/ps_r_left.png') },
+    'rs-right':  { html: img('ps/ps_r_right.png') },
+    // D-Pad
+    up:    { html: img('ps/ps_dpad_up.png') },
+    down:  { html: img('ps/ps_dpad_down.png') },
+    left:  { html: img('ps/ps_dpad_left.png') },
+    right: { html: img('ps/ps_dpad_right.png') },
+    'dpad':   { html: img('ps/ps_dpad_neutral.png') },
+    // Special
+    options:  { html: img('ps/ps_option.png') },
+    share:    { html: img('ps/ps_share.png') },
+    touchpad: { html: img('ps/ps_touch.png') },
   },
   xbox: {
-    cross:                { html: use('gp-xb-a') },
-    circle:               { html: use('gp-xb-b') },
-    square:               { html: use('gp-xb-x') },
-    triangle:             { html: use('gp-xb-y') },
-    l1:                   { html: use('gp-shoulder-lb', 48, 28) },
-    r1:                   { html: use('gp-shoulder-rb', 48, 28) },
-    l2:                   { html: use('gp-trigger-lt',  48, 28) },
-    r2:                   { html: use('gp-trigger-rt',  48, 28) },
-    l3:                   { html: use('gp-stick-l3') },
-    r3:                   { html: use('gp-stick-r3') },
-    ls:                   { html: use('gp-stick-neutral') },
-    'ls-up':              { html: use('gp-stick-up') },
-    'ls-down':            { html: use('gp-stick-down') },
-    'ls-left':            { html: use('gp-stick-left') },
-    'ls-right':           { html: use('gp-stick-right') },
-    rs:                   { html: use('gp-stick-neutral') },
-    'rs-up':              { html: use('gp-stick-up') },
-    'rs-down':            { html: use('gp-stick-down') },
-    'rs-left':            { html: use('gp-stick-left') },
-    'rs-right':           { html: use('gp-stick-right') },
-    up:                   { html: use('gp-dpad-up') },
-    down:                 { html: use('gp-dpad-down') },
-    left:                 { html: use('gp-dpad-left') },
-    right:                { html: use('gp-dpad-right') },
-    options:              { html: use('gp-menu') },
-    share:                { html: use('gp-share-xb') },
-    touchpad:             { html: pill('TouchPad') },
-    'touchpad-left':      { html: pill('TouchPad') },
-    'touchpad-right':     { html: pill('TouchPad') },
-    'touchpad-swipe-up':  { html: pill('TouchPad') },
-    'touchpad-swipe-down':{ html: pill('TouchPad') },
+    // Face
+    cross:    { html: img('xbox/ms_a.png') },
+    circle:   { html: img('xbox/ms_b.png') },
+    square:   { html: img('xbox/ms_x.png') },
+    triangle: { html: img('xbox/ms_y.png') },
+    // Shoulders
+    l1:       { html: img('xbox/ms_l_lb.png') },
+    r1:       { html: img('xbox/ms_r_rb.png') },
+    // Triggers
+    l2:       { html: img('xbox/ms_l_lt.png') },
+    r2:       { html: img('xbox/ms_r_rt.png') },
+    // Stick press — no image, pill fallback
+    l3:          { html: pill('L3') },
+    r3:          { html: pill('R3') },
+    // Left stick
+    ls:          { html: img('xbox/ms_l_neutral.png') },
+    'ls-up':     { html: img('xbox/ms_l_up.png') },
+    'ls-down':   { html: img('xbox/ms_l_down.png') },
+    'ls-left':   { html: img('xbox/ms_l_left.png') },
+    'ls-right':  { html: img('xbox/ms_l_right.png') },
+    // Right stick
+    rs:          { html: img('xbox/ms_r_neutral.png') },
+    'rs-up':     { html: img('xbox/ms_r_up.png') },
+    'rs-down':   { html: img('xbox/ms_r_down.png') },
+    'rs-left':   { html: img('xbox/ms_r_left.png') },
+    'rs-right':  { html: img('xbox/ms_r_right.png') },
+    // D-Pad
+    up:    { html: img('xbox/ms_dpad_up.png') },
+    down:  { html: img('xbox/ms_dpad_down.png') },
+    left:  { html: img('xbox/ms_dpad_left.png') },
+    right: { html: img('xbox/ms_dpad_right.png') },
+    dpad:  { html: img('xbox/ms_dpad_neutral.png') },
+    // Special
+    options:  { html: img('xbox/ms_option.png') },
+    share:    { html: img('xbox/ms_share.png') },
+    touchpad: { html: pill('TouchPad') },
   },
+
   switch: {
-    cross:                { html: use('gp-sw-a') },
-    circle:               { html: use('gp-sw-b') },
-    square:               { html: use('gp-sw-x') },
-    triangle:             { html: use('gp-sw-y') },
-
-    l1:                   { html: use('gp-shoulder-l', 48, 28) },
-    r1:                   { html: use('gp-shoulder-r', 48, 28) },
-    l2:                   { html: use('gp-trigger-zl', 48, 28) },
-    r2:                   { html: use('gp-trigger-zr', 48, 28) },
-    l3:                   { html: use('gp-stick-l3') },
-    r3:                   { html: use('gp-stick-r3') },
-
-    ls:                   { html: use('gp-stick-neutral') },
-    'ls-up':              { html: use('gp-stick-up') },
-    'ls-down':            { html: use('gp-stick-down') },
-    'ls-left':            { html: use('gp-stick-left') },
-    'ls-right':           { html: use('gp-stick-right') },
-    rs:                   { html: use('gp-stick-neutral') },
-    'rs-up':              { html: use('gp-stick-up') },
-    'rs-down':            { html: use('gp-stick-down') },
-    'rs-left':            { html: use('gp-stick-left') },
-    'rs-right':           { html: use('gp-stick-right') },
-    up:                   { html: use('gp-dpad-up') },
-    down:                 { html: use('gp-dpad-down') },
-    left:                 { html: use('gp-dpad-left') },
-    right:                { html: use('gp-dpad-right') },
-    options:              { html: use('gp-plus') },
-    share:                { html: use('gp-capture-sw') },
-    touchpad:             { html: pill('TouchPad') },
-    'touchpad-left':      { html: pill('TouchPad') },
-    'touchpad-right':     { html: pill('TouchPad') },
-    'touchpad-swipe-up':  { html: pill('TouchPad') },
-    'touchpad-swipe-down':{ html: pill('TouchPad') },
+    // Face
+    cross:               { html: img('switch/ns_a.png') },
+    circle:              { html: img('switch/ns_b.png') },
+    square:              { html: img('switch/ns_x.png') },
+    triangle:            { html: img('switch/ns_y.png') },
+    // Shoulders
+    l1:                  { html: img('switch/ns_l_l.png') },
+    r1:                  { html: img('switch/ns_r_r.png') },
+    // Triggers
+    l2:                  { html: img('switch/ns_l_zl.png') },
+    r2:                  { html: img('switch/ns_r_zr.png') },
+    // Stick press
+    l3:                  { html: img('switch/ns_l_l3.png') },
+    r3:                  { html: img('switch/ns_r_r3.png') },
+    // Left stick
+    ls:                  { html: img('switch/ns_l_neutral.png') },
+    'ls-up':             { html: img('switch/ns_l_up.png') },
+    'ls-down':           { html: img('switch/ns_l_down.png') },
+    'ls-left':           { html: img('switch/ns_l_left.png') },
+    'ls-right':          { html: img('switch/ns_l_right.png') },
+    // Right stick
+    rs:                  { html: img('switch/ns_r_neutral.png') },
+    'rs-up':             { html: img('switch/ns_r_up.png') },
+    'rs-down':           { html: img('switch/ns_r_down.png') },
+    'rs-left':           { html: img('switch/ns_r_left.png') },
+    'rs-right':          { html: img('switch/ns_r_right.png') },
+    // D-Pad
+    up:                  { html: img('switch/ns_dpad_up.png') },
+    down:                { html: img('switch/ns_dpad_down.png') },
+    left:                { html: img('switch/ns_dpad_left.png') },
+    right:               { html: img('switch/ns_dpad_right.png') },
+    dpad:                { html: img('switch/ns_dpad_neutral.png') },
+    // Special
+    options:             { html: img('switch/ns_option.png') },
+    share:               { html: img('switch/ns_share.png') },
+    touchpad:            { html: pill('TouchPad') },
   },
 };
 
@@ -128,10 +141,10 @@ export const PICKER_SECTIONS = [
   { label: 'Face',         btns: ['cross', 'circle', 'square', 'triangle'] },
   { label: 'Shoulder',     btns: ['l1', 'r1'] },
   { label: 'Trigger',      btns: ['l2', 'r2'] },
-  { label: 'D-Pad',        btns: ['up', 'down', 'left', 'right'] },
+  { label: 'D-Pad',        btns: ['up', 'down', 'left', 'right', 'dpad'] },
   { label: 'Left stick',   btns: ['ls', 'ls-up', 'ls-down', 'ls-left', 'ls-right', 'l3'] },
   { label: 'Right stick',  btns: ['rs', 'rs-up', 'rs-down', 'rs-left', 'rs-right', 'r3'] },
-  { label: 'Special',      btns: ['options', 'share', 'touchpad', 'touchpad-left', 'touchpad-right', 'touchpad-swipe-up', 'touchpad-swipe-down'] },
+  { label: 'Special',      btns: ['options', 'share', 'touchpad'] },
 ];
 
 export function renderBtnHtml(canonical, platform) {
@@ -161,7 +174,6 @@ export function makeRemarkGamepadPlugin(platform) {
             parts.push({ type: 'text', value: node.value.slice(last) });
           if (parent) {
             const idx = parent.children.indexOf(node);
-
             if (idx !== -1) parent.children.splice(idx, 1, ...parts);
           }
           return;
