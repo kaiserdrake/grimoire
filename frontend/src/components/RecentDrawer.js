@@ -51,7 +51,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
     setReadLoading(true);
     try {
       const data = await api.bulletin.getContent(postId);
-      setReadPost({ title: data.title, content: data.content, platform: data.platform });
+      setReadPost({ id: postId, title: data.title, content: data.content, platform: data.platform });
     } catch {
       setReadPost(null);
     } finally {
@@ -346,7 +346,7 @@ function BulletinReadModal({ post, loading, onClose }) {
   const gamepad = detectGamepad(post?.platform);
 
   const handleCopyLink = () => {
-    const url = `${window.location.origin}${window.location.pathname}#bulletin-${post.id}`;
+    const url = `${window.location.origin}/#bulletin-${post.id}`;
     navigator.clipboard.writeText(url).then(() => {
 
       setCopied(true);
