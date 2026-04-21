@@ -16,7 +16,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import { useTabState } from '@/context/TabStateContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
-import { TAG_STYLE, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon } from '@/constants/tags';
+import { TAG_STYLE, TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon, PlayingIcon, GroupIcon, CompletedIcon, PendedIcon, OtherIcon } from '@/constants/tags';
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +57,25 @@ const GridViewIcon = () => (
     <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
   </svg>
 );
+
+// ── Filter icon ───────────────────────────────────────────────────────────────
+const FilterIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </svg>
+);
+
+// All filterable categories in display order
+const ALL_FILTERS = [
+  { key: 'playing',   label: 'Playing',   Icon: PlayingIcon   },
+  { key: 'backlog',   label: 'Backlog',   Icon: BacklogIcon   },
+  { key: 'wishlist',  label: 'Wishlist',  Icon: WishlistIcon  },
+  { key: 'favorite',  label: 'Favorites', Icon: FavoriteIcon  },
+  { key: 'completed', label: 'Completed', Icon: CompletedIcon },
+  { key: 'pend',      label: 'Pended',    Icon: PendedIcon    },
+  { key: 'dropped',   label: 'Dropped',   Icon: DroppedIcon   },
+  { key: 'other',     label: 'Other',     Icon: OtherIcon     },
+];
 
 // ── Filter button ─────────────────────────────────────────────────────────────
 
@@ -154,16 +173,30 @@ export default function HomePage() {
   const searchRef = useRef(null);
 
   const { listState, setListState } = useTabState();
-  const activeFilter = listState.activeFilter;
+
+  const activeFilters = listState.activeFilters ?? ['playing', 'backlog', 'wishlist', 'favorite', 'completed', 'pend', 'other'];
+  const grouped      = listState.grouped ?? false;
   const search       = listState.search;
   const showSearch   = listState.showSearch;
   const sortBy       = listState.sortBy;
 
-  const setActiveFilter = (val) =>
-    setListState((s) => ({ ...s, activeFilter: typeof val === 'function' ? val(s.activeFilter) : val }));
-  const setSearch       = (val) => setListState((s) => ({ ...s, search: val }));
-  const setShowSearch   = (val) => setListState((s) => ({ ...s, showSearch: val }));
-  const setSortBy       = (val) => setListState((s) => ({ ...s, sortBy: val }));
+  const setActiveFilters = (val) =>
+    setListState((s) => ({ ...s, activeFilters: typeof val === 'function' ? val(s.activeFilters) : val }));
+  const setGrouped    = (val) => setListState((s) => ({ ...s, grouped: val }));
+  const setSearch     = (val) => setListState((s) => ({ ...s, search: val }));
+  const setShowSearch = (val) => setListState((s) => ({ ...s, showSearch: val }));
+  const setSortBy     = (val) => setListState((s) => ({ ...s, sortBy: val }));
+
+  const toggleFilter = (key) => {
+    setActiveFilters((prev) => {
+      if (prev.includes(key)) {
+        // Don't allow deselecting all
+        if (prev.length === 1) return prev;
+        return prev.filter((f) => f !== key);
+      }
+      return [...prev, key];
+    });
+  };
 
   const viewMode    = listState.viewMode;
   const setViewMode = (val) => {
@@ -175,9 +208,8 @@ export default function HomePage() {
     if (!user) return;
     setFetching(true);
     try {
-      const data = await api.games.list(activeFilter === 'all' ? undefined : activeFilter);
+      const data = await api.games.list(); // always fetch all; filtering is client-side
       setGames(data);
-      // Refresh selectedGame in place so the open modal reflects latest data
       setSelectedGame((prev) => {
         if (!prev) return null;
         return data.find((g) => g.id === prev.id) ?? prev;
@@ -187,7 +219,7 @@ export default function HomePage() {
     } finally {
       setFetching(false);
     }
-  }, [user, activeFilter]);
+  }, [user]);
 
   useEffect(() => { fetchGames(); }, [fetchGames]);
 
@@ -196,7 +228,24 @@ export default function HomePage() {
   }, [showSearch]);
 
   const filtered = games
-  .filter((g) => !search || g.title.toLowerCase().includes(search.toLowerCase()))
+    .filter((g) => {
+      if (search && !g.title.toLowerCase().includes(search.toLowerCase())) return false;
+
+      const pts = g.playthroughs ?? [];
+      const statuses = new Set(pts.map((p) => p.status));
+
+      if (activeFilters.includes('playing')   && statuses.has('playing'))   return true;
+      if (activeFilters.includes('completed') && statuses.has('completed'))  return true;
+      if (activeFilters.includes('pend')      && statuses.has('pend'))       return true;
+      if (activeFilters.includes('dropped')   && statuses.has('dropped'))    return true;
+      if (activeFilters.includes(g.tag))                                     return true;
+
+      // "Other": no tag, no playthroughs at all
+      const hasAnyPt = pts.length > 0;
+      if (activeFilters.includes('other') && !g.tag && !hasAnyPt)           return true;
+
+      return false;
+  })
   .sort((a, b) => {
     if (sortBy === 'default') {
       // Tier 1: has a "playing" playthrough
@@ -236,6 +285,25 @@ export default function HomePage() {
     return 0;
   });
 
+  // ── Group filtered games by category ─────────────────────────────────────────
+  const GROUP_ORDER = [
+    { key: 'playing',  label: 'PLAYING',  test: (g) => (g.playthroughs ?? []).some((p) => p.status === 'playing') },
+    { key: 'backlog',  label: 'BACKLOG',  test: (g) => g.tag === 'backlog'  && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
+    { key: 'wishlist', label: 'WISHLIST', test: (g) => g.tag === 'wishlist' && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
+    { key: 'favorite', label: 'FAVORITES', test: (g) => g.tag === 'favorite' && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
+    { key: 'dropped',  label: 'DROPPED',  test: (g) => g.tag === 'dropped'  && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
+    { key: 'other',    label: 'OTHER',    test: () => true },
+  ];
+
+  const groupedGames = grouped
+    ? GROUP_ORDER.reduce((acc, grp) => {
+        const games = filtered.filter((g) => !acc.assigned.has(g.id) && grp.test(g));
+        games.forEach((g) => acc.assigned.add(g.id));
+        if (games.length > 0) acc.groups.push({ ...grp, games });
+        return acc;
+      }, { groups: [], assigned: new Set() }).groups
+    : null;
+
   if (loading) {
     return (
       <>
@@ -247,9 +315,7 @@ export default function HomePage() {
     );
   }
 
-  const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label;
-
-  const toggleFilter = (key) => setActiveFilter((cur) => cur === key ? 'all' : key);
+  const currentSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? 'Default';
 
   return (
     <>
@@ -271,109 +337,193 @@ export default function HomePage() {
 
         {user && (
           <>
-            {/* ── Filter bar ── */}
-            <VStack spacing={2} mb={6} align="stretch">
-              <HStack spacing={2} align="center">
+          {/* ── Filter bar ── */}
+          <VStack spacing={2} mb={6} align="stretch">
+            <HStack spacing={2} align="center">
 
-                {/* Tag filters */}
-                <AllFilterBtn active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
-                <FilterBtn active={activeFilter === 'backlog'}  onClick={() => toggleFilter('backlog')}  title="Backlog"  tag="backlog">
-                  <BacklogIcon size={16} />
-                </FilterBtn>
-                <FilterBtn active={activeFilter === 'wishlist'} onClick={() => toggleFilter('wishlist')} title="Wishlist" tag="wishlist">
-                  <WishlistIcon size={16} />
-                </FilterBtn>
-                <FilterBtn active={activeFilter === 'favorite'} onClick={() => toggleFilter('favorite')} title="Favorites" tag="favorite">
-                  <FavoriteIcon size={16} />
-                </FilterBtn>
-                <FilterBtn active={activeFilter === 'dropped'} onClick={() => toggleFilter('dropped')} title="Dropped" tag="dropped">
-                  <DroppedIcon size={16} />
-                </FilterBtn>
-
-                {/* Separator */}
-                <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
-
-                {/* Search toggle */}
-                <FilterBtn
-                  active={showSearch || !!search}
-                  onClick={() => { const next = !showSearch; setShowSearch(next); if (!next) setSearch(''); }}
-                  title="Search"
-                  tag="backlog"
+              {/* Group toggle */}
+              <Tooltip label={grouped ? 'Ungroup' : 'Group by category'} hasArrow placement="bottom" openDelay={400}>
+                <Box
+                  as="button"
+                  onClick={() => setGrouped(!grouped)}
+                  w="34px" h="34px"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  display="flex" alignItems="center" justifyContent="center"
+                  transition="all 0.15s"
+                  style={{
+                    background:  grouped ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
+                    borderColor: grouped ? 'var(--color-border)'   : 'var(--color-border)',
+                    color:       grouped ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <SearchIconSvg />
-                </FilterBtn>
-
-                {/* Sort dropdown */}
-                <Menu>
-                  <Tooltip label={`Sort: ${currentSortLabel}`} hasArrow placement="bottom" openDelay={400}>
-                    <MenuButton
-                      as={Box}
-                      w="34px" h="34px"
-                      borderRadius="md"
-                      borderWidth="1px"
-                      display="flex" alignItems="center" justifyContent="center"
-                      transition="all 0.15s"
-                      style={{
-                        background: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border)',
-                        color: 'var(--color-text-muted)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <SortIconSvg />
-                    </MenuButton>
-                  </Tooltip>
-                  <MenuList fontSize="sm" minW="170px">
-                    {SORT_OPTIONS.map((o) => (
+                  <GroupIcon />
+                </Box>
+              </Tooltip>
+              {/* Filter menu */}
+              <Menu closeOnSelect={false}>
+                <Tooltip label="Filter" hasArrow placement="bottom" openDelay={400}>
+                <MenuButton
+                  as={Box}
+                  w="34px" h="34px"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  cursor="pointer"
+                  transition="all 0.15s"
+                  style={{
+                    background:  activeFilters.length < ALL_FILTERS.length ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
+                    borderColor: activeFilters.length < ALL_FILTERS.length ? 'var(--color-border)'   : 'var(--color-border)',
+                    color:       activeFilters.length < ALL_FILTERS.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
+                    <FilterIcon />
+                  </Box>
+                </MenuButton>
+                </Tooltip>
+                <MenuList fontSize="sm" minW="160px" py={1}>
+                  {ALL_FILTERS.map(({ key, label, tag, Icon }) => {
+                    const active = activeFilters.includes(key);
+                    const style  = TAG_STYLE[key] ?? {};
+                    return (
                       <MenuItem
-                        key={o.value}
-                        onClick={() => setSortBy(o.value)}
-                        fontWeight={sortBy === o.value ? '700' : 'normal'}
-                        color={sortBy === o.value ? 'var(--color-accent)' : undefined}
+                        key={key}
+                        onClick={() => toggleFilter(key)}
+                        display="flex" alignItems="center" gap="8px"
+                        color={active ? style.color : 'var(--color-text-muted)'}
+                        fontWeight={active ? 600 : 400}
+                        _hover={{ bg: 'var(--color-bg-hover)' }}
+                        bg="transparent"
                       >
-                        {o.label}
+                        <Box
+                          w="14px" h="14px" borderRadius="2px" borderWidth="1.5px" flexShrink={0}
+                          display="flex" alignItems="center" justifyContent="center"
+                          style={{
+                            borderColor:  active ? style.color  : 'var(--color-border)',
+                            background:   active ? style.bg     : 'transparent',
+                          }}
+                        >
+                          {active && <Box w="7px" h="7px" borderRadius="1px" style={{ background: style.color }} />}
+                        </Box>
+                        <Box as="span" display="flex" alignItems="center" gap="6px">
+                          <Icon size={13} />
+                          {label}
+                        </Box>
                       </MenuItem>
-                    ))}
-                  </MenuList>
-                </Menu>
+                    );
+                  })}
+                  <Box h="1px" bg="var(--color-border)" my={1} mx={2} />
+                  <MenuItem
+                    onClick={() =>
+                      setActiveFilters(
+                        activeFilters.length === ALL_FILTERS.length
+                          ? [ALL_FILTERS[0].key]          // keep at least one active
+                          : ALL_FILTERS.map((f) => f.key)
+                      )
+                    }
+                    fontSize="xs"
+                    color="var(--color-text-muted)"
+                    _hover={{ bg: 'var(--color-bg-hover)', color: 'var(--color-text-primary)' }}
+                    bg="transparent"
+                  >
+                  {activeFilters.length === ALL_FILTERS.length ? 'Unselect all' : 'Select all'}
+                </MenuItem>
+                </MenuList>
+              </Menu>
 
-                {/* View toggle */}
-                <Tooltip label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'} hasArrow placement="bottom" openDelay={400}>
-                  <Box
-                    as="button"
-                    onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+              {/* Separator */}
+              <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
+
+              {/* Search toggle */}
+              <FilterBtn
+                active={showSearch || !!search}
+                onClick={() => { const next = !showSearch; setShowSearch(next); if (!next) setSearch(''); }}
+                title="Search"
+                tag="backlog"
+              >
+                <SearchIconSvg />
+              </FilterBtn>
+              {/* Sort dropdown */}
+              <Menu>
+                <Tooltip label={`Sort: ${currentSortLabel}`} hasArrow placement="bottom" openDelay={400}>
+                  <MenuButton
+                    as={Box}
                     w="34px" h="34px"
                     borderRadius="md"
                     borderWidth="1px"
-                    display="flex" alignItems="center" justifyContent="center"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    cursor="pointer"
                     transition="all 0.15s"
                     style={{
                       background: 'var(--color-bg-surface)',
                       borderColor: 'var(--color-border)',
                       color: 'var(--color-text-muted)',
-                      cursor: 'pointer',
                     }}
                   >
-                  {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
+                    <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
+                    <SortIconSvg />
                   </Box>
+                </MenuButton>
                 </Tooltip>
+                <MenuList fontSize="sm" minW="170px">
+                  {SORT_OPTIONS.map((o) => (
+                    <MenuItem
+                      key={o.value}
+                      onClick={() => setSortBy(o.value)}
+                      fontWeight={sortBy === o.value ? '700' : 'normal'}
+                      color={sortBy === o.value ? 'var(--color-accent)' : undefined}
+                    >
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Menu>
 
-                {/* Spacer */}
-                <Box flex={1} />
+              {/* Separator */}
+              <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
 
-                {/* Add Game — right-aligned */}
-                <Button
-                  size="sm"
-                  leftIcon={<AddIcon />}
-                  bg="var(--color-accent)"
-                  color="white"
-                  _hover={{ bg: 'var(--color-accent-hover)' }}
-                  onClick={onAddOpen}
-                  flexShrink={0}
+              {/* View toggle */}
+              <Tooltip label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'} hasArrow placement="bottom" openDelay={400}>
+                <Box
+                  as="button"
+                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                  w="34px" h="34px"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  display="flex" alignItems="center" justifyContent="center"
+                  transition="all 0.15s"
+                  style={{
+                    background: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border)',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
                 >
-                  Add Game
-                </Button>
+                {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
+                </Box>
+              </Tooltip>
 
+              {/* Spacer */}
+              <Box flex={1} />
+
+              {/* Add Game — right-aligned */}
+              <Button
+                size="sm"
+                leftIcon={<AddIcon />}
+                bg="var(--color-accent)"
+                color="white"
+                _hover={{ bg: 'var(--color-accent-hover)' }}
+                onClick={onAddOpen}
+                flexShrink={0}
+              >
+                Add Game
+              </Button>
               </HStack>
 
               {/* Collapsible search */}
@@ -406,17 +556,51 @@ export default function HomePage() {
                 </Text>
               </Box>
             ) : (
-              viewMode === 'grid' ? (
+              grouped && groupedGames ? (
+                groupedGames.map(({ key, label, games }) => (
+                  <Box key={key} mb={6}>
+                    {/* Group label */}
+                    <HStack spacing={2} mb={2} align="center">
+                      <Box h="1px" w="12px" bg="var(--color-border)" flexShrink={0} />
+                      <Text
+                        fontSize="0.65rem"
+                        fontWeight={700}
+                        letterSpacing="0.1em"
+                        color="var(--color-text-muted)"
+                        textTransform="uppercase"
+                        flexShrink={0}
+                      >
+                        {label} · {games.length}
+                      </Text>
+                      <Box h="1px" flex={1} bg="var(--color-border)" />
+                    </HStack>
+
+                    {viewMode === 'grid' ? (
+                      <div className="game-grid">
+                        {games.map((game) => (
+                          <GameCardView key={game.id} game={game} onClick={() => setSelectedGame(game)} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="game-list">
+                        {games.map((game) => (
+                          <GameListRow key={game.id} game={game} onClick={() => setSelectedGame(game)} />
+                        ))}
+                      </div>
+                    )}
+                  </Box>
+                ))
+              ) : viewMode === 'grid' ? (
                 <div className="game-grid">
-                {filtered.map((game) => (
-                  <GameCardView key={game.id} game={game} onClick={() => setSelectedGame(game)} />
-                ))}
+                  {filtered.map((game) => (
+                    <GameCardView key={game.id} game={game} onClick={() => setSelectedGame(game)} />
+                  ))}
                 </div>
               ) : (
                 <div className="game-list">
-                {filtered.map((game) => (
-                  <GameListRow key={game.id} game={game} onClick={() => setSelectedGame(game)} />
-                ))}
+                  {filtered.map((game) => (
+                    <GameListRow key={game.id} game={game} onClick={() => setSelectedGame(game)} />
+                  ))}
                 </div>
               )
             )}

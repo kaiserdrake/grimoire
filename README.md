@@ -17,19 +17,6 @@ A personal video game journal. Track your backlog, write markdown notes, and ann
 
 ---
 
-## Tech Stack
-
-| Layer     | Technology                              |
-|-----------|-----------------------------------------|
-| Frontend  | Next.js 14, Chakra UI v2, React 18      |
-| Backend   | Express.js (Node 18, ESM)              |
-| Database  | PostgreSQL 15                           |
-| Auth      | JWT via HttpOnly cookies                |
-| Theming   | CSS custom properties (`globals.css`)  |
-| Deploy    | Docker Compose                          |
-
----
-
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed
@@ -52,6 +39,12 @@ docker compose pull
 docker compose up -d
 ```
 
+To run **strictly production** locally (ignoring the override file):
+
+```bash
+docker compose -f docker-compose.yml up -d
+```
+
 ### Local Development
 
 A `docker-compose.override.yml` file is automatically merged by Docker Compose when present. It overrides the production images with local builds so you can develop and test changes without touching the production config.
@@ -60,13 +53,8 @@ A `docker-compose.override.yml` file is automatically merged by Docker Compose w
 docker compose up --build -d
 ```
 
+> Development uses the 'docker-compose.override.yml' file, which builds images from the local `backend` and `frontend` directories.
 > Docker Compose automatically detects and merges `docker-compose.override.yml` — no extra flags needed.
-
-To run **strictly production** locally (ignoring the override file):
-
-```bash
-docker compose -f docker-compose.yml up -d
-```
 
 ---
 
@@ -343,6 +331,20 @@ As an admin you can:
 - Delete users
 
 Access user management via the **navbar menu → Manage Users** (visible to admins only).
+
+---
+
+## Tech Stack
+
+| Layer     | Technology                              |
+|-----------|-----------------------------------------|
+| Frontend  | Next.js 14, Chakra UI v2, React 18      |
+| Backend   | Express.js (Node 18, ESM)              |
+| Database  | PostgreSQL 15                           |
+| Auth      | JWT via HttpOnly cookies                |
+| Theming   | CSS custom properties (`globals.css`)  |
+| Deploy    | Docker Compose                          |
+
 
 ---
 
