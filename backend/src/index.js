@@ -1330,4 +1330,107 @@ app.put('/api/settings/:key', isAuthenticated, async (req, res) => {
   }
 });
 
+// ── BULLETIN POSTS ────────────────────────────────────────────────────────────
+// GET  /api/bulletin         — public, list all posts (newest first)
+// POST /api/bulletin         — authenticated, publish a note file
+// DELETE /api/bulletin/:id   — admin OR post owner
+
+app.get('/api/bulletin', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT bp.id, bp.title, bp.cover_url, bp.created_at,
+
+              bp.note_file_id, bp.game_id, bp.user_id,
+              u.name AS author_name,
+              g.title AS game_title
+       FROM bulletin_posts bp
+       JOIN users u ON u.id = bp.user_id
+       JOIN games g ON g.id = bp.game_id
+       ORDER BY bp.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error listing bulletin posts:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+app.post('/api/bulletin', isAuthenticated, async (req, res) => {
+  const { note_file_id } = req.body;
+  const userId = req.user.id;
+  if (!note_file_id) return res.status(400).json({ message: 'note_file_id is required.' });
+  try {
+    const fileResult = await query(
+      `SELECT nf.id, nf.title, nf.playthrough_id,
+              p.game_id,
+              g.cover_url
+       FROM note_files nf
+       JOIN playthroughs p ON p.id = nf.playthrough_id
+       JOIN games g ON g.id = p.game_id
+       WHERE nf.id = $1 AND nf.user_id = $2`,
+      [note_file_id, userId]
+    );
+    if (fileResult.rows.length === 0) return res.status(404).json({ message: 'Note file not found.' });
+    const nf = fileResult.rows[0];
+
+    const existing = await query(
+      'SELECT id FROM bulletin_posts WHERE note_file_id=$1',
+      [note_file_id]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ message: 'This note is already published to the bulletin.' });
+    }
+
+    const result = await query(
+      `INSERT INTO bulletin_posts (note_file_id, user_id, game_id, title, cover_url)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, title, cover_url, created_at, note_file_id, game_id, user_id`,
+      [note_file_id, userId, nf.game_id, nf.title, nf.cover_url]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error publishing bulletin post:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+// Admin OR the post owner can delete
+app.delete('/api/bulletin/:id', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'Admin';
+  try {
+    const check = await query('SELECT user_id FROM bulletin_posts WHERE id=$1', [id]);
+    if (check.rows.length === 0) return res.status(404).json({ message: 'Post not found.' });
+
+    if (!isAdmin && check.rows[0].user_id !== userId) {
+      return res.status(403).json({ message: 'Forbidden.' });
+    }
+    await query('DELETE FROM bulletin_posts WHERE id=$1', [id]);
+    res.json({ message: 'Post deleted.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+// Public — anyone can read a published post's content
+app.get('/api/bulletin/:id/content', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await query(
+      `SELECT nf.content, nf.title, p.platform
+       FROM bulletin_posts bp
+       JOIN note_files nf ON nf.id = bp.note_file_id
+       JOIN playthroughs p ON p.id = nf.playthrough_id
+       WHERE bp.id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Post not found.' });
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 app.listen(PORT, () => console.log(`Grimoire backend running on port ${PORT}`));
