@@ -67,7 +67,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
   }, [openPostById]);
 
   const handleRead = async (post) => {
-    window.location.hash = `bulletin-${post.id}`;
+    history.replaceState(null, '', `/#bulletin-${post.id}`);
     openPostById(post.id);
   };
 

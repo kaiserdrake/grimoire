@@ -62,8 +62,8 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
     if (match) openPostById(Number(match[1]));
   }, [openPostById]);
 
-  const handleRead = (post) => {
-    window.location.hash = `bulletin-${post.id}`;
+  const handleRead = async (post) => {
+    history.replaceState(null, '', `/#bulletin-${post.id}`);
     openPostById(post.id);
   };
 
