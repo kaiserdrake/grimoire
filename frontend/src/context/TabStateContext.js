@@ -18,7 +18,7 @@ function getInitialViewMode() {
 export const TabStateProvider = ({ children }) => {
   // ── List tab ──────────────────────────────────────────────────────────────
   const [listState, setListState] = useState({
-    activeFilters: ['playing', 'backlog', 'wishlist', 'favorite', 'dropped'], // all on by default
+    activeFilters: ['playing', 'backlog', 'wishlist', 'favorite', 'completed', 'pend', 'other'],
     grouped:       false,
     search:        '',
     showSearch:    false,

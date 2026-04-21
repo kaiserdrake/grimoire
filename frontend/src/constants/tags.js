@@ -30,6 +30,25 @@ export const PlayingIcon = ({ size = 15 }) => (
   </svg>
 );
 
+export const CompletedIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+export const PendedIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <rect x="6" y="4" width="4" height="16" rx="1" />
+    <rect x="14" y="4" width="4" height="16" rx="1" />
+  </svg>
+);
+
+export const OtherIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+  </svg>
+);
+
 export const GroupIcon = ({ size = 15 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="3" y1="6" x2="21" y2="6" />
@@ -48,9 +67,13 @@ export const TAG_CONFIG = {
 };
 
 export const TAG_STYLE = {
-  playing:  { color: '#4a90d9', bg: '#B5D4F418', background: '#B5D4F418', border: '#6aaae8'             },
-  backlog:  { color: 'var(--color-accent)', bg: 'var(--color-accent-subtle)', background: 'var(--color-accent-subtle)', border: 'var(--color-accent)' },
-  wishlist: { color: '#c8a800',             bg: '#f6c90e18',                  background: '#f6c90e18',                  border: '#c8a800'             },
-  favorite: { color: '#e05c5c',             bg: '#e05c5c18',                  background: '#e05c5c18',                  border: '#e05c5c'             },
-  dropped:  { color: '#888888',             bg: '#88888818',                  background: '#88888818',                  border: '#888888'             },
+  playing:   { color: '#4a90d9',             bg: '#B5D4F418',                  background: '#B5D4F418',                  border: '#6aaae8'              },
+  backlog:   { color: 'var(--color-accent)', bg: 'var(--color-accent-subtle)', background: 'var(--color-accent-subtle)', border: 'var(--color-accent)'  },
+  wishlist:  { color: '#c8a800',             bg: '#f6c90e18',                  background: '#f6c90e18',                  border: '#c8a800'               },
+  favorite:  { color: '#e05c5c',             bg: '#e05c5c18',                  background: '#e05c5c18',                  border: '#e05c5c'               },
+  completed: { color: '#4caf82',             bg: '#4caf8218',                  background: '#4caf8218',                  border: '#4caf82'               },
+  pend:      { color: '#999999',             bg: '#99999918',                  background: '#99999918',                  border: '#999999'               },
+  dropped:   { color: '#888888',             bg: '#88888818',                  background: '#88888818',                  border: '#888888'               },
+  other:     { color: '#777777',             bg: '#77777718',                  background: '#77777718',                  border: '#777777'               },
 };
+

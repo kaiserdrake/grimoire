@@ -16,7 +16,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import { useTabState } from '@/context/TabStateContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
-import { TAG_STYLE, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon, PlayingIcon, GroupIcon } from '@/constants/tags';
+import { TAG_STYLE, TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon, PlayingIcon, GroupIcon, CompletedIcon, PendedIcon, OtherIcon } from '@/constants/tags';
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
@@ -67,11 +67,14 @@ const FilterIcon = () => (
 
 // All filterable categories in display order
 const ALL_FILTERS = [
-  { key: 'playing',  label: 'Playing',   tag: null,        Icon: PlayingIcon  },
-  { key: 'backlog',  label: 'Backlog',   tag: 'backlog',   Icon: BacklogIcon  },
-  { key: 'wishlist', label: 'Wishlist',  tag: 'wishlist',  Icon: WishlistIcon },
-  { key: 'favorite', label: 'Favorites', tag: 'favorite',  Icon: FavoriteIcon },
-  { key: 'dropped',  label: 'Dropped',   tag: 'dropped',   Icon: DroppedIcon  },
+  { key: 'playing',   label: 'Playing',   Icon: PlayingIcon   },
+  { key: 'backlog',   label: 'Backlog',   Icon: BacklogIcon   },
+  { key: 'wishlist',  label: 'Wishlist',  Icon: WishlistIcon  },
+  { key: 'favorite',  label: 'Favorites', Icon: FavoriteIcon  },
+  { key: 'completed', label: 'Completed', Icon: CompletedIcon },
+  { key: 'pend',      label: 'Pended',    Icon: PendedIcon    },
+  { key: 'dropped',   label: 'Dropped',   Icon: DroppedIcon   },
+  { key: 'other',     label: 'Other',     Icon: OtherIcon     },
 ];
 
 // ── Filter button ─────────────────────────────────────────────────────────────
@@ -171,7 +174,7 @@ export default function HomePage() {
 
   const { listState, setListState } = useTabState();
 
-  const activeFilters = listState.activeFilters ?? ['playing', 'backlog', 'wishlist', 'favorite', 'dropped'];
+  const activeFilters = listState.activeFilters ?? ['playing', 'backlog', 'wishlist', 'favorite', 'completed', 'pend', 'other'];
   const grouped      = listState.grouped ?? false;
   const search       = listState.search;
   const showSearch   = listState.showSearch;
@@ -225,16 +228,23 @@ export default function HomePage() {
   }, [showSearch]);
 
   const filtered = games
-  .filter((g) => {
-    if (search && !g.title.toLowerCase().includes(search.toLowerCase())) return false;
-    // A game passes if it matches ANY active filter
-    const isPlaying = (g.playthroughs ?? []).some((p) => p.status === 'playing');
-    if (activeFilters.includes('playing') && isPlaying) return true;
-    if (activeFilters.includes(g.tag)) return true;
-     // Untagged, non-playing games: show if all filters are active (i.e., "show everything" mode)
-    const allFilters = ['playing', 'backlog', 'wishlist', 'favorite', 'dropped'];
-    if (!isPlaying && !g.tag && activeFilters.length === allFilters.length) return true;
-    return false;
+    .filter((g) => {
+      if (search && !g.title.toLowerCase().includes(search.toLowerCase())) return false;
+
+      const pts = g.playthroughs ?? [];
+      const statuses = new Set(pts.map((p) => p.status));
+
+      if (activeFilters.includes('playing')   && statuses.has('playing'))   return true;
+      if (activeFilters.includes('completed') && statuses.has('completed'))  return true;
+      if (activeFilters.includes('pend')      && statuses.has('pend'))       return true;
+      if (activeFilters.includes('dropped')   && statuses.has('dropped'))    return true;
+      if (activeFilters.includes(g.tag))                                     return true;
+
+      // "Other": no tag, no playthroughs at all
+      const hasAnyPt = pts.length > 0;
+      if (activeFilters.includes('other') && !g.tag && !hasAnyPt)           return true;
+
+      return false;
   })
   .sort((a, b) => {
     if (sortBy === 'default') {
@@ -354,22 +364,26 @@ export default function HomePage() {
               {/* Filter menu */}
               <Menu closeOnSelect={false}>
                 <Tooltip label="Filter" hasArrow placement="bottom" openDelay={400}>
-                  <MenuButton
-                    as={Box}
-                    w="34px" h="34px"
-                    borderRadius="md"
-                    borderWidth="1px"
-                    display="flex" alignItems="center" justifyContent="center"
-                    transition="all 0.15s"
-                    style={{
-                      background:  activeFilters.length < ALL_FILTERS.length ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
-                      borderColor: activeFilters.length < ALL_FILTERS.length ? 'var(--color-border)'   : 'var(--color-border)',
-                      color:       activeFilters.length < ALL_FILTERS.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                      cursor: 'pointer',
-                    }}
-                  >
+                <MenuButton
+                  as={Box}
+                  w="34px" h="34px"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  cursor="pointer"
+                  transition="all 0.15s"
+                  style={{
+                    background:  activeFilters.length < ALL_FILTERS.length ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
+                    borderColor: activeFilters.length < ALL_FILTERS.length ? 'var(--color-border)'   : 'var(--color-border)',
+                    color:       activeFilters.length < ALL_FILTERS.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                  }}
+                >
+                  <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
                     <FilterIcon />
-                  </MenuButton>
+                  </Box>
+                </MenuButton>
                 </Tooltip>
                 <MenuList fontSize="sm" minW="160px" py={1}>
                   {ALL_FILTERS.map(({ key, label, tag, Icon }) => {
@@ -402,93 +416,114 @@ export default function HomePage() {
                       </MenuItem>
                     );
                   })}
+                  <Box h="1px" bg="var(--color-border)" my={1} mx={2} />
+                  <MenuItem
+                    onClick={() =>
+                      setActiveFilters(
+                        activeFilters.length === ALL_FILTERS.length
+                          ? [ALL_FILTERS[0].key]          // keep at least one active
+                          : ALL_FILTERS.map((f) => f.key)
+                      )
+                    }
+                    fontSize="xs"
+                    color="var(--color-text-muted)"
+                    _hover={{ bg: 'var(--color-bg-hover)', color: 'var(--color-text-primary)' }}
+                    bg="transparent"
+                  >
+                  {activeFilters.length === ALL_FILTERS.length ? 'Unselect all' : 'Select all'}
+                </MenuItem>
                 </MenuList>
               </Menu>
 
               {/* Separator */}
               <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
 
-                {/* Search toggle */}
-                <FilterBtn
-                  active={showSearch || !!search}
-                  onClick={() => { const next = !showSearch; setShowSearch(next); if (!next) setSearch(''); }}
-                  title="Search"
-                  tag="backlog"
-                >
-                  <SearchIconSvg />
-                </FilterBtn>
-
-                {/* Sort dropdown */}
-                <Menu>
-                  <Tooltip label={`Sort: ${currentSortLabel}`} hasArrow placement="bottom" openDelay={400}>
-                    <MenuButton
-                      as={Box}
-                      w="34px" h="34px"
-                      borderRadius="md"
-                      borderWidth="1px"
-                      display="flex" alignItems="center" justifyContent="center"
-                      transition="all 0.15s"
-                      style={{
-                        background: 'var(--color-bg-surface)',
-                        borderColor: 'var(--color-border)',
-                        color: 'var(--color-text-muted)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <SortIconSvg />
-                    </MenuButton>
-                  </Tooltip>
-                  <MenuList fontSize="sm" minW="170px">
-                    {SORT_OPTIONS.map((o) => (
-                      <MenuItem
-                        key={o.value}
-                        onClick={() => setSortBy(o.value)}
-                        fontWeight={sortBy === o.value ? '700' : 'normal'}
-                        color={sortBy === o.value ? 'var(--color-accent)' : undefined}
-                      >
-                        {o.label}
-                      </MenuItem>
-                    ))}
-                  </MenuList>
-                </Menu>
-
-                {/* View toggle */}
-                <Tooltip label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'} hasArrow placement="bottom" openDelay={400}>
-                  <Box
-                    as="button"
-                    onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+              {/* Search toggle */}
+              <FilterBtn
+                active={showSearch || !!search}
+                onClick={() => { const next = !showSearch; setShowSearch(next); if (!next) setSearch(''); }}
+                title="Search"
+                tag="backlog"
+              >
+                <SearchIconSvg />
+              </FilterBtn>
+              {/* Sort dropdown */}
+              <Menu>
+                <Tooltip label={`Sort: ${currentSortLabel}`} hasArrow placement="bottom" openDelay={400}>
+                  <MenuButton
+                    as={Box}
                     w="34px" h="34px"
                     borderRadius="md"
                     borderWidth="1px"
-                    display="flex" alignItems="center" justifyContent="center"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    cursor="pointer"
                     transition="all 0.15s"
                     style={{
                       background: 'var(--color-bg-surface)',
                       borderColor: 'var(--color-border)',
                       color: 'var(--color-text-muted)',
-                      cursor: 'pointer',
                     }}
                   >
-                  {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
+                    <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
+                    <SortIconSvg />
                   </Box>
+                </MenuButton>
                 </Tooltip>
+                <MenuList fontSize="sm" minW="170px">
+                  {SORT_OPTIONS.map((o) => (
+                    <MenuItem
+                      key={o.value}
+                      onClick={() => setSortBy(o.value)}
+                      fontWeight={sortBy === o.value ? '700' : 'normal'}
+                      color={sortBy === o.value ? 'var(--color-accent)' : undefined}
+                    >
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Menu>
 
-                {/* Spacer */}
-                <Box flex={1} />
+              {/* Separator */}
+              <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
 
-                {/* Add Game — right-aligned */}
-                <Button
-                  size="sm"
-                  leftIcon={<AddIcon />}
-                  bg="var(--color-accent)"
-                  color="white"
-                  _hover={{ bg: 'var(--color-accent-hover)' }}
-                  onClick={onAddOpen}
-                  flexShrink={0}
+              {/* View toggle */}
+              <Tooltip label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'} hasArrow placement="bottom" openDelay={400}>
+                <Box
+                  as="button"
+                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                  w="34px" h="34px"
+                  borderRadius="md"
+                  borderWidth="1px"
+                  display="flex" alignItems="center" justifyContent="center"
+                  transition="all 0.15s"
+                  style={{
+                    background: 'var(--color-bg-surface)',
+                    borderColor: 'var(--color-border)',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
                 >
-                  Add Game
-                </Button>
+                {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
+                </Box>
+              </Tooltip>
 
+              {/* Spacer */}
+              <Box flex={1} />
+
+              {/* Add Game — right-aligned */}
+              <Button
+                size="sm"
+                leftIcon={<AddIcon />}
+                bg="var(--color-accent)"
+                color="white"
+                _hover={{ bg: 'var(--color-accent-hover)' }}
+                onClick={onAddOpen}
+                flexShrink={0}
+              >
+                Add Game
+              </Button>
               </HStack>
 
               {/* Collapsible search */}
