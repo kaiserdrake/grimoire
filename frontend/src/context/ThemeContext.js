@@ -1,31 +1,19 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext } from 'react';
+import { useColorMode } from '@chakra-ui/react';
 
 const ThemeContext = createContext(null);
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState('light');
+  const { colorMode, setColorMode } = useColorMode();
 
-  // Load persisted preference on mount
-  useEffect(() => {
-    const stored = localStorage.getItem('grimoire-theme');
-    const preferred = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    apply(preferred);
-  }, []);
-
-  const apply = (t) => {
-    document.documentElement.setAttribute('data-theme', t);
-    setTheme(t);
-    localStorage.setItem('grimoire-theme', t);
-  };
-
-  const toggleTheme = () => apply(theme === 'light' ? 'dark' : 'light');
-  const setLight = () => apply('light');
-  const setDark  = () => apply('dark');
+  const setLight = () => setColorMode('light');
+  const setDark  = () => setColorMode('dark');
+  const toggleTheme = () => setColorMode(colorMode === 'light' ? 'dark' : 'light');
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setLight, setDark }}>
+    <ThemeContext.Provider value={{ theme: colorMode, toggleTheme, setLight, setDark }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -1,0 +1,9 @@
+services:
+  grimoire-backend:
+    build: ./backend
+    image: null
+
+  grimoire-frontend:
+    build:
+      context: ./frontend
+    image: null

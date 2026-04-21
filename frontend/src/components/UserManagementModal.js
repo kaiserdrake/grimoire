@@ -238,7 +238,8 @@ export default function UserManagementModal({ isOpen, onClose }) {
             </VStack>
           </ModalBody>
           <ModalFooter borderTopWidth="1px" borderColor="var(--color-border-subtle)">
-            <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>
+            <Button size="sm" variant="ghost" bg="transparent" border="none" boxShadow="none"
+              _hover={{ bg: 'transparent', opacity: 0.75 }} onClick={onClose}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -251,7 +252,8 @@ export default function UserManagementModal({ isOpen, onClose }) {
               This will permanently delete the user and all their data. This cannot be undone.
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
-              <Button ref={cancelRef} size="sm" variant="ghost" onClick={() => setUserToDelete(null)}>Cancel</Button>
+              <Button ref={cancelRef} size="sm" variant="ghost" bg="transparent" border="none" boxShadow="none"
+                _hover={{ bg: 'transparent', opacity: 0.75 }} onClick={() => setUserToDelete(null)}>Cancel</Button>
               <Button size="sm" onClick={handleDelete} isLoading={isLoading}
                 style={{ background: 'var(--color-danger)', color: 'white' }}
               >Delete</Button>

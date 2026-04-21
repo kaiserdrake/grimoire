@@ -3,10 +3,12 @@
 import { ChakraProvider, extendTheme } from '@chakra-ui/react';
 import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
+import { LastVisitedProvider } from '@/context/LastVisitedContext';
+import { TabStateProvider } from '@/context/TabStateContext';
 
 const chakraTheme = extendTheme({
   config: {
-    initialColorMode: 'light',
+    initialColorMode: 'system',
     useSystemColorMode: false,
   },
   fonts: {
@@ -20,7 +22,11 @@ export function Providers({ children }) {
     <ChakraProvider theme={chakraTheme} resetCSS={false}>
       <ThemeProvider>
         <AuthProvider>
-          {children}
+          <LastVisitedProvider>
+            <TabStateProvider>
+              {children}
+            </TabStateProvider>
+          </LastVisitedProvider>
         </AuthProvider>
       </ThemeProvider>
     </ChakraProvider>

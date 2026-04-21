@@ -1,0 +1,10 @@
+.env
+.env.local
+.env.production
+appdata/
+node_modules/
+dist/
+build/
+.next/
+*.log
+npm-debug.log*

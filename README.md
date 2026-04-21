@@ -37,6 +37,39 @@ A personal video game journal. Track your backlog, write markdown notes, and ann
 
 ---
 
+## Deployment Modes
+
+Grimoire supports two deployment modes using Docker Compose override files.
+
+### Production (Unraid, home server)
+
+Uses **pre-built images** published to GitHub Container Registry (GHCR). No local build required.
+
+`docker-compose.yml` is the production config. Just pull and run:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Local Development
+
+A `docker-compose.override.yml` file is automatically merged by Docker Compose when present. It overrides the production images with local builds so you can develop and test changes without touching the production config.
+
+```bash
+docker compose up --build -d
+```
+
+> Docker Compose automatically detects and merges `docker-compose.override.yml` — no extra flags needed.
+
+To run **strictly production** locally (ignoring the override file):
+
+```bash
+docker compose -f docker-compose.yml up -d
+```
+
+---
+
 ## First-Time Setup
 
 ### 1. Clone the repository
@@ -70,15 +103,14 @@ JWT_SECRET=replace_with_a_long_random_secret
 ADMIN_NAME=admin
 ADMIN_PASSWORD=your_admin_password
 
-# IGDB — from https://dev.twitch.tv/console
-IGDB_CLIENT_ID=your_twitch_client_id
-IGDB_CLIENT_SECRET=your_twitch_client_secret
-
-# URLs
-NEXT_PUBLIC_API_URL=http://localhost:3001
+# Data path
 GRIMOIRE_DATA_PATH=./appdata
 
 NODE_ENV=production
+
+# Optional: set this when behind a reverse proxy like Nginx Proxy Manager
+# If unset, the backend will auto-detect its public URL from the request
+# API_PUBLIC_URL=https://grimoire.yourdomain.com
 ```
 
 > **Tip:** Generate a secure JWT secret with:
@@ -86,17 +118,22 @@ NODE_ENV=production
 > openssl rand -hex 32
 > ```
 
-### 3. Build and start the containers
+### 3. Start the containers
 
+**Production** (uses pre-built images from GHCR):
+```bash
+docker compose pull
+docker compose up -d
+```
+
+**Local development** (builds from source):
 ```bash
 docker compose up --build -d
 ```
 
-This builds all three containers (database, backend, frontend) and starts them in the background.
-
 ### 4. Initialize the database
 
-Run this **once** after the first build to create all tables and the admin user:
+Run this **once** after the first start to create all tables and the admin user:
 
 ```bash
 docker compose exec grimoire-backend npm run db:init
@@ -123,23 +160,24 @@ Sign in with the `ADMIN_NAME` and `ADMIN_PASSWORD` you set in `.env`.
 
 ## Updating the App
 
-When you pull new changes from the repository:
-
-### 1. Pull the latest code
+### Production
 
 ```bash
 git pull origin main
+docker compose pull
+docker compose up -d
 ```
 
-### 2. Rebuild and restart
+Docker will pull only the images that have changed. Your database data is stored in `./appdata/postgres` and is **not affected** by updates.
+
+### Local Development
 
 ```bash
+git pull origin main
 docker compose up --build -d
 ```
 
-Docker Compose will only rebuild containers whose source has changed. Your database data is stored in `./appdata/postgres` and is **not affected** by rebuilds.
-
-### 3. Re-initialize the database (only if schema changed)
+### Re-initialize the database (only if schema changed)
 
 > ⚠️ **Warning:** Running `db:init` drops and recreates all tables. Only do this if there are breaking schema changes and you are okay losing existing data, or if you are setting up from scratch.
 
@@ -148,6 +186,40 @@ docker compose exec grimoire-backend npm run db:init
 ```
 
 For non-destructive schema changes (e.g. adding a column), write a migration manually instead — see [Adding Migrations](#adding-migrations) below.
+
+---
+
+## Reverse Proxy Setup (Nginx Proxy Manager)
+
+When running behind a reverse proxy, set `API_PUBLIC_URL` in your `.env` to the public-facing URL of the backend. This ensures the frontend receives the correct URL at runtime.
+
+```env
+API_PUBLIC_URL=https://grimoire.yourdomain.com
+```
+
+> **How it works:** The frontend fetches its backend URL at runtime via `/api/config` — nothing is baked into the Docker image at build time. This makes the same image portable across environments (local, Unraid, reverse proxy, etc.).
+
+If `API_PUBLIC_URL` is not set, the backend will auto-detect the URL from the incoming request headers, which works correctly for direct access but may return wrong results behind a proxy.
+
+---
+
+## Publishing Images to GitHub Container Registry
+
+Docker images are automatically built and pushed to GHCR on every push to `main` via GitHub Actions (`.github/workflows/docker-publish.yml`).
+
+The workflow builds:
+- `ghcr.io/kaiserdrake/grimoire-backend:latest`
+- `ghcr.io/kaiserdrake/grimoire-frontend:latest`
+
+To pull images manually on your server:
+
+```bash
+# Log in to GHCR (one-time setup)
+echo <your_github_token> | docker login ghcr.io -u kaiserdrake --password-stdin
+
+# Pull latest images
+docker compose pull
+```
 
 ---
 
@@ -167,21 +239,43 @@ docker compose logs -f
 docker compose logs -f grimoire-backend
 docker compose logs -f grimoire-frontend
 
-# Restart a single service after a code change
-docker compose up --build -d grimoire-backend
+# Restart a single service
+docker compose up -d grimoire-backend
 
 # Open a PostgreSQL shell
 docker exec -it grimoire-db psql -U grimoire_user -d grimoire_db
 
 # Check service health
 curl http://localhost:3001/api/health
+
+# Check runtime config (API URL as seen by frontend)
+curl http://localhost:3001/api/config
 ```
+
+---
+
+## Exporting Data
+
+You can export all game and playthrough data as JSON directly from the backend container.
+
+```bash
+# Export all users' data to stdout
+docker compose exec grimoire-backend npm run export
+
+# Export a single user's data
+docker compose exec grimoire-backend npm run export -- --user alice
+
+# Save the output to a file on the host
+docker compose exec grimoire-backend npm run export > games-export.json
+```
+
+The output is a JSON array — one entry per user — each containing a `user` object and a `games` array with nested `playthroughs` and `sessions`.
 
 ---
 
 ## Local Development (without Docker)
 
-If you want to run the app locally for development:
+If you want to run the app locally for development without Docker:
 
 ### Backend
 
@@ -207,18 +301,16 @@ The frontend dev server runs on `http://localhost:3000` and the backend on `http
 ## IGDB / Twitch API Setup
 
 Grimoire uses the [IGDB API](https://api-docs.igdb.com/) (powered by Twitch) to search for games.
+IGDB credentials are configured **per user** via the app's Settings, not via environment variables.
 
 1. Go to [https://dev.twitch.tv/console](https://dev.twitch.tv/console) and log in or create a free account.
 2. Click **Register Your Application**.
 3. Give it any name, set the OAuth Redirect URL to `http://localhost`, and choose **Category: Other**.
 4. After creating the app, copy the **Client ID**.
 5. Click **New Secret** to generate a **Client Secret**.
-6. Add both to your `.env`:
-   ```env
-   IGDB_CLIENT_ID=your_client_id
-   IGDB_CLIENT_SECRET=your_client_secret
-   ```
-7. Restart the backend: `docker compose up --build -d grimoire-backend`
+6. Log in to Grimoire, open **Settings → IGDB Integration**, and paste both values.
+
+Each user configures their own credentials. Game search will not work until credentials are set.
 
 ---
 
@@ -265,11 +357,9 @@ Access user management via the **navbar menu → Manage Users** (visible to admi
 | `JWT_SECRET` | ✅ | Secret for signing JWT tokens — keep this long and random |
 | `ADMIN_NAME` | ✅ | Username for the first admin account |
 | `ADMIN_PASSWORD` | ✅ | Password for the first admin account |
-| `IGDB_CLIENT_ID` | ✅ | Twitch app Client ID for IGDB game search |
-| `IGDB_CLIENT_SECRET` | ✅ | Twitch app Client Secret for IGDB game search |
-| `NEXT_PUBLIC_API_URL` | ✅ | URL the frontend uses to reach the backend |
-| `GRIMOIRE_DATA_PATH` | ✅ | Host path where PostgreSQL data is persisted |
+| `GRIMOIRE_DATA_PATH` | ✅ | Host path where PostgreSQL data and uploads are persisted |
 | `NODE_ENV` | ✅ | `development` or `production` |
+| `API_PUBLIC_URL` | ❌ | Public URL of the backend. Set this when behind a reverse proxy. Auto-detected if unset. |
 
 ---
 

@@ -14,8 +14,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const check = async () => {
       try {
-        const userData = await api.users.me();
-        setUser(userData);
+        const data = await api.auth.me();
+        setUser(data.user);
       } catch {
         setUser(null);
       } finally {
@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (usernameOrEmail, password) => {
     try {
-      const data = await api.login({ usernameOrEmail, password });
+      const data = await api.auth.login({ usernameOrEmail, password });
       setUser(data.user);
       return { success: true };
     } catch (err) {
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await api.logout();
+      await api.auth.logout();
     } catch {}
     setUser(null);
     router.push('/');
@@ -45,9 +45,9 @@ export const AuthProvider = ({ children }) => {
 
   const refreshUser = async () => {
     try {
-      const userData = await api.users.me();
-      setUser(userData);
-      return userData;
+      const data = await api.auth.me();
+      setUser(data.user);
+      return data.user;
     } catch (err) {
       throw err;
     }

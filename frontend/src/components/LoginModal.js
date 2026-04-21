@@ -91,7 +91,8 @@ export default function LoginModal({ isOpen, onClose }) {
           </VStack>
         </ModalBody>
         <ModalFooter gap={2} borderTopWidth="1px" borderColor="var(--color-border-subtle)">
-          <Button variant="ghost" onClick={onClose} size="sm">Cancel</Button>
+          <Button variant="ghost" onClick={onClose} size="sm" bg="transparent" border="none" boxShadow="none"
+            _hover={{ bg: 'transparent', opacity: 0.75 }}>Cancel</Button>
           <Button
             onClick={handleSubmit}
             isLoading={isLoading}
