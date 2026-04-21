@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiFileText, FiMap, FiBook, FiTrash2 } from 'react-icons/fi';
+import { FiFileText, FiMap, FiBook, FiTrash2, FiLink } from 'react-icons/fi';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
@@ -23,9 +23,10 @@ export default function RecentDrawer({ isOpen, onToggle }) {
   const router = useRouter();
   const { recentGames } = useLastVisited();
   const { user } = useAuth();
+
   const [activeTab, setActiveTab] = useState('recent');
   const [bulletinPosts, setBulletinPosts] = useState([]);
-  const [readPost, setReadPost] = useState(null); // { title, content }
+  const [readPost, setReadPost] = useState(null); // { title, content, id }
   const [readLoading, setReadLoading] = useState(false);
 
   // Non-authenticated users only see bulletin
@@ -37,6 +38,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
     try {
       const posts = await api.bulletin.list();
       setBulletinPosts(posts);
+      return posts;
     } catch {}
   }, []);
 
@@ -44,27 +46,47 @@ export default function RecentDrawer({ isOpen, onToggle }) {
     if (isOpen && effectiveTab === 'bulletin') loadBulletin();
   }, [isOpen, effectiveTab, loadBulletin]);
 
-  const handleRead = async (post) => {
+  const openPostById = useCallback(async (postId) => {
     setReadLoading(true);
     try {
-      const data = await api.bulletin.getContent(post.id);
-      setReadPost({ title: data.title, content: data.content });
+      const data = await api.bulletin.getContent(postId);
+      setReadPost({ title: data.title, content: data.content, id: postId });
     } catch {
       setReadPost(null);
     } finally {
-
       setReadLoading(false);
     }
+  }, []);
+
+  // On mount, check for #bulletin-{id} hash and auto-open that post
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/^#bulletin-(\d+)$/);
+    if (match) openPostById(Number(match[1]));
+  }, [openPostById]);
+
+  const handleRead = async (post) => {
+    window.location.hash = `bulletin-${post.id}`;
+    openPostById(post.id);
   };
+
+  const handleCloseRead = () => {
+    setReadPost(null);
+    // Clear the hash without triggering a navigation
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  };
+
 
   const handleDelete = async (postId) => {
     try {
       await api.bulletin.delete(postId);
+
       setBulletinPosts(prev => prev.filter(p => p.id !== postId));
     } catch {}
   };
 
   const pullLabel = effectiveTab === 'bulletin' ? 'BULLETIN' : 'RECENT';
+
 
   return (
     <>
@@ -72,6 +94,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
         <button className="recent-drawer-pull" onClick={onToggle}>
           <span>{pullLabel}</span>
         </button>
+
         <div className="recent-drawer-inner">
           {/* Tab bar — only show when logged in (both tabs available) */}
           {user && (
@@ -83,8 +106,10 @@ export default function RecentDrawer({ isOpen, onToggle }) {
                 RECENT
               </button>
               <button
+
                 className={`recent-drawer-tab${effectiveTab === 'bulletin' ? ' active' : ''}`}
                 onClick={() => { setActiveTab('bulletin'); loadBulletin(); }}
+
               >
                 BULLETIN
               </button>
@@ -94,15 +119,16 @@ export default function RecentDrawer({ isOpen, onToggle }) {
           {/* Body */}
           <div className="recent-drawer-body">
             {effectiveTab === 'recent' ? (
+
               recentGames.length === 0 ? (
                 <span className="recent-drawer-empty">
                   Open a game's Notes or Map to see it here.
                 </span>
               ) : (
-
                 recentGames.map((entry, idx) => (
                   <RecentGameRow
                     key={entry.gameId}
+
                     entry={entry}
                     isCurrent={idx === 0}
                     onNotes={() => navigate(`/game/${entry.gameId}/${entry.ptId}/notes`)}
@@ -134,7 +160,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
         <BulletinReadModal
           post={readPost}
           loading={readLoading}
-          onClose={() => setReadPost(null)}
+          onClose={handleCloseRead}
         />
       )}
     </>
@@ -185,7 +211,6 @@ export function RecentGameRow({ entry, isCurrent, onNotes, onMap }) {
           </GameActionBtn>
         </div>
       </div>
-
     </div>
   );
 }
@@ -211,7 +236,6 @@ function BulletinHoldToDelete({ onDelete, hasCover }) {
   const reset = () => {
     cancelAnimationFrame(rafRef.current);
     startRef.current = null;
-
     firedRef.current = false;
     setProgress(0);
     setHolding(false);
@@ -220,9 +244,11 @@ function BulletinHoldToDelete({ onDelete, hasCover }) {
   const start = (e) => { e.preventDefault(); e.stopPropagation(); startRef.current = Date.now(); firedRef.current = false; setHolding(true); rafRef.current = requestAnimationFrame(tick); };
   const stop  = (e) => { e.stopPropagation(); if (!firedRef.current) reset(); };
 
+
   const radius = 7;
   const svgSize = radius * 2 + 4;
   const circumference = 2 * Math.PI * radius;
+
 
   const bg     = hasCover ? 'rgba(220,38,38,0.55)' : 'transparent';
   const border = hasCover ? '1px solid rgba(220,38,38,0.6)' : '1px solid rgba(220,38,38,0.5)';
@@ -262,7 +288,6 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
   return (
     <div
       className="recent-drawer-game-row"
-
       style={{
         backgroundImage:    hasCover ? `url(${post.cover_url})` : 'none',
         backgroundSize:     'cover',
@@ -270,12 +295,12 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
         backgroundColor:    'var(--color-bg-subtle)',
         height: '56px',
       }}
+
     >
       {hasCover && (
         <div style={{
           position: 'absolute', inset: 0,
           background: 'linear-gradient(to right, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.75) 100%)',
-
         }} />
       )}
       <div className="recent-drawer-game-content">
@@ -316,6 +341,18 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
 
 // ── BulletinReadModal ─────────────────────────────────────────────────────────
 function BulletinReadModal({ post, loading, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+
+  const handleCopyLink = () => {
+    const url = `${window.location.origin}${window.location.pathname}#bulletin-${post.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
     <div
       style={{
@@ -342,23 +379,41 @@ function BulletinReadModal({ post, loading, onClose }) {
       >
         {/* Header */}
         <div style={{
-
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '12px 16px',
           borderBottom: '1px solid var(--color-border-subtle)',
           flexShrink: 0,
+          gap: '8px',
         }}>
-          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text-primary)' }}>
+          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {loading ? 'Loading…' : (post?.title || 'Note')}
           </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--color-text-muted)', fontSize: '1.1rem', lineHeight: 1,
-              padding: '2px 6px', borderRadius: '4px',
-            }}
-          >✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            {post && (
+              <button
+                onClick={handleCopyLink}
+                title={copied ? 'Copied!' : 'Copy shareable link'}
+                style={{
+                  background: 'none', border: 'none',
+                  cursor: 'pointer', borderRadius: '4px',
+                  color: copied ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  padding: '2px 4px', display: 'flex', alignItems: 'center',
+                  transition: 'color 0.15s',
+                }}
+
+              >
+                <FiLink size={13} />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--color-text-muted)', fontSize: '1.1rem', lineHeight: 1,
+                padding: '2px 6px', borderRadius: '4px',
+              }}
+            >✕</button>
+          </div>
         </div>
         {/* Content */}
         <div
@@ -367,6 +422,7 @@ function BulletinReadModal({ post, loading, onClose }) {
         >
           {loading ? (
             <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.875rem' }}>Loading…</div>
+
           ) : post?.content?.trim() ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
