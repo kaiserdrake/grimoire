@@ -523,7 +523,7 @@ function PlaythroughRow({ pt, allPlaythroughs, gameId, onUpdated, onDeleted }) {
 
       {/* Sessions table */}
       {open && (
-        <Box borderTopWidth="1px" borderColor="var(--color-border-subtle)">
+        <Box borderTopWidth="1px" borderColor="var(--color-border-subtle)" overflowX="auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg-page)' }}>
