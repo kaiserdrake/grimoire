@@ -853,6 +853,7 @@ export default function MapPage({ params }) {
   const handleCreateMap = async ({ name, attachmentId, file, url }) => {
     if (!newMapPtId) return;
     setUploading(true);
+    let created = null;
     try {
       let attachmentIdToUse = attachmentId;
       if (!attachmentIdToUse) {
@@ -861,21 +862,16 @@ export default function MapPage({ params }) {
           : await api.attachments.fromUrl(id, 'maps', url);
         attachmentIdToUse = attachment.id;
       }
-      const created = await api.maps.create(newMapPtId, {
-        name,
-        attachment_id: attachmentIdToUse,
-      });
-
-      setMapsByPt(prev => ({
-        ...prev,
-        [newMapPtId]: [...(prev[newMapPtId] || []), created],
-      }));
-      await selectMap(newMapPtId, created);
-      setNewMapPtId(null);
+      created = await api.maps.create(newMapPtId, { name, attachment_id: attachmentIdToUse });
     } catch (err) {
       toast({ title: 'Failed to create map', description: err.message, status: 'error', duration: 4000 });
     } finally {
       setUploading(false);
+      if (created) {
+        setMapsByPt(prev => ({ ...prev, [newMapPtId]: [...(prev[newMapPtId] || []), created] }));
+        await selectMap(newMapPtId, created);
+        setNewMapPtId(null);  // ← modal closes only after spinner has been visible
+      }
     }
   };
 

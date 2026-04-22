@@ -116,18 +116,19 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
 
   const handleInsert = async () => {
     setUploading(true);
+    let inserted = null;
     try {
       const attachment = tabIndex === 1
         ? await api.attachments.upload(gameId, 'notes', file)
         : await api.attachments.fromUrl(gameId, 'notes', url.trim());
 
       const label = attachment.original_name || 'image';
-      onInsert(`![${label}](${apiBase}${attachment.url})`);
-      handleClose();
+      inserted = `![${label}](${apiBase}${attachment.url})`;
     } catch (err) {
       toast({ title: 'Upload failed', description: err.message, status: 'error', duration: 4000 });
     } finally {
       setUploading(false);
+      if (inserted) { onInsert(inserted); handleClose(); }
     }
   };
 
