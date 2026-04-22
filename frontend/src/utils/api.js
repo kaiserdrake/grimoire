@@ -1,6 +1,6 @@
 let API_BASE = null;
 
-async function getApiBase() {
+export async function getApiBase() {
   if (API_BASE) return API_BASE;
   const res = await fetch('/api/config');
   const data = await res.json();
