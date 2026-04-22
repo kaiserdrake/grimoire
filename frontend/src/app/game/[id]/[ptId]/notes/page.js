@@ -8,7 +8,8 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiCpu, FiMap } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap } from 'react-icons/fi';
+import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -297,7 +298,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
       'cell'
     )},
     null,
-    { icon: <FiCpu size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
+    { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
   ];
 
   return (
