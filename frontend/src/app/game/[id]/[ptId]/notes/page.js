@@ -8,7 +8,8 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiCpu } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap } from 'react-icons/fi';
+import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,6 +19,7 @@ import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
+import { useRouter } from 'next/navigation';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -116,18 +118,19 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
 
   const handleInsert = async () => {
     setUploading(true);
+    let inserted = null;
     try {
       const attachment = tabIndex === 1
         ? await api.attachments.upload(gameId, 'notes', file)
         : await api.attachments.fromUrl(gameId, 'notes', url.trim());
 
       const label = attachment.original_name || 'image';
-      onInsert(`![${label}](${apiBase}${attachment.url})`);
-      handleClose();
+      inserted = `![${label}](${apiBase}${attachment.url})`;
     } catch (err) {
       toast({ title: 'Upload failed', description: err.message, status: 'error', duration: 4000 });
     } finally {
       setUploading(false);
+      if (inserted) { onInsert(inserted); handleClose(); }
     }
   };
 
@@ -238,7 +241,8 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
           <ModalFooter style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
             <HStack spacing={2}>
               <Button size="sm" variant="ghost" onClick={handleClose}>Cancel</Button>
-              <Button size="sm" isLoading={uploading} isDisabled={!canInsert} onClick={handleInsert}
+              <Button size="sm" isLoading={uploading} loadingText="Uploading…" spinnerPlacement="start"
+                isDisabled={!canInsert} onClick={handleInsert}
                 style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}>
                 Insert
               </Button>
@@ -294,7 +298,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
       'cell'
     )},
     null,
-    { icon: <FiCpu size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
+    { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
   ];
 
   return (
@@ -392,8 +396,8 @@ function RenameInput({ value, onConfirm, onCancel }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
-  onSelectFile, onNewFile, onDeleteFile, onRenameFile, onOpenGame, initialPtId }) {
-
+  onSelectFile, onNewFile, onDeleteFile, onRenameFile, onOpenGame, initialPtId, gameId }) {
+  const router = useRouter();
   const [expandedPts, setExpandedPts] = useState(() => {
     const init = {};
     if (initialPtId) init[initialPtId] = true;
@@ -469,6 +473,18 @@ function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
             </div>
           );
         })}
+      </div>
+      {/* Footer — navigate to Maps */}
+      <div className="notes-sidebar-footer">
+        <button
+          className="notes-sidebar-footer-btn"
+          onClick={() => activePtId && gameId && router.push(`/game/${gameId}/${activePtId}/map`)}
+          disabled={!activePtId || !gameId}
+          title="Go to Maps for this playthrough"
+        >
+          <FiMap size={11} style={{ flexShrink: 0 }} />
+          TO MAPS
+        </button>
       </div>
     </div>
   );
@@ -773,6 +789,7 @@ export default function NotesPage({ params }) {
             onRenameFile={handleRenameFile}
             onOpenGame={() => setGameModalOpen(true)}
             initialPtId={initialPtId}
+            gameId={id}
           />
         )}
 

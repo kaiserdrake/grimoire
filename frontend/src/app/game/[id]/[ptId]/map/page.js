@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2 } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +19,7 @@ import { useTabState } from '@/context/TabStateContext';
 import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
 import { api, getApiBase } from '@/utils/api';
+import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 
 const PIN_COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange'];
@@ -428,8 +429,9 @@ function Sidebar({
   game, playthroughs, mapsByPt, pinsByMap,
   activeMapId, activePinId,
   onSelectMap, onSelectPin, onNewMap, onDeleteMap,
-  initialPtId, onOpenGame,
+  initialPtId, onOpenGame, gameId,
 }) {
+  const router = useRouter();
   const [expandedPts,  setExpandedPts]  = useState({});
   const [expandedMaps, setExpandedMaps] = useState({});
 
@@ -557,6 +559,18 @@ function Sidebar({
             </div>
           );
         })}
+      </div>
+      {/* Footer — navigate to Notes */}
+      <div className="notes-sidebar-footer">
+        <button
+          className="notes-sidebar-footer-btn"
+          onClick={() => initialPtId && gameId && router.push(`/game/${gameId}/${initialPtId}/notes`)}
+          disabled={!initialPtId || !gameId}
+          title="Go to Notes for this playthrough"
+        >
+          <FiFileText size={11} style={{ flexShrink: 0 }} />
+          TO NOTES
+        </button>
       </div>
     </div>
   );
@@ -694,7 +708,8 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
               style={{ color: 'var(--color-text-secondary)' }}>
               Cancel
             </Button>
-            <Button size="sm" isLoading={uploading} isDisabled={!canSubmit}
+            <Button size="sm" isLoading={uploading} loadingText="Uploading…" spinnerPlacement="start"
+              isDisabled={!canSubmit}
               onClick={() => onConfirm({
                 name: name.trim(),
                 attachmentId: selectedAtt?.id,
@@ -853,6 +868,7 @@ export default function MapPage({ params }) {
   const handleCreateMap = async ({ name, attachmentId, file, url }) => {
     if (!newMapPtId) return;
     setUploading(true);
+    let created = null;
     try {
       let attachmentIdToUse = attachmentId;
       if (!attachmentIdToUse) {
@@ -861,21 +877,16 @@ export default function MapPage({ params }) {
           : await api.attachments.fromUrl(id, 'maps', url);
         attachmentIdToUse = attachment.id;
       }
-      const created = await api.maps.create(newMapPtId, {
-        name,
-        attachment_id: attachmentIdToUse,
-      });
-
-      setMapsByPt(prev => ({
-        ...prev,
-        [newMapPtId]: [...(prev[newMapPtId] || []), created],
-      }));
-      await selectMap(newMapPtId, created);
-      setNewMapPtId(null);
+      created = await api.maps.create(newMapPtId, { name, attachment_id: attachmentIdToUse });
     } catch (err) {
       toast({ title: 'Failed to create map', description: err.message, status: 'error', duration: 4000 });
     } finally {
       setUploading(false);
+      if (created) {
+        setMapsByPt(prev => ({ ...prev, [newMapPtId]: [...(prev[newMapPtId] || []), created] }));
+        await selectMap(newMapPtId, created);
+        setNewMapPtId(null);  // ← modal closes only after spinner has been visible
+      }
     }
   };
 
@@ -1104,6 +1115,7 @@ export default function MapPage({ params }) {
             onDeleteMap={handleDeleteMap}
             initialPtId={initialPtId}
             onOpenGame={() => setGameModalOpen(true)}
+            gameId={id}
           />
         )}
 
