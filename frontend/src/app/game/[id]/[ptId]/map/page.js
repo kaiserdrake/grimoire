@@ -18,7 +18,7 @@ import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
-import { api } from '@/utils/api';
+import { api, getApiBase } from '@/utils/api';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 
 const PIN_COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange'];
@@ -559,7 +559,7 @@ function Sidebar({
 }
 
 // ── Map Modal ─────────────────────────────────────────────────────────────
-function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId }) {
+function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase }) {
   const [name,       setName]       = useState('');
   const [tab,        setTab]        = useState(0);
   const [file,       setFile]       = useState(null);
@@ -634,7 +634,7 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId }) {
                           }}>
                           <Box h="72px" overflow="hidden" style={{ background: 'var(--color-bg-page)' }}>
                             <img
-                              src={`${process.env.NEXT_PUBLIC_API_URL}${att.url}`}
+                              src={`${apiBase}${att.url}`}
                               alt={att.original_name || att.filename}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
@@ -713,6 +713,7 @@ export default function MapPage({ params }) {
   const { id, ptId: initialPtId } = params;
   const toast   = useToast();
   const { user } = useAuth();
+  const [apiBase, setApiBase] = useState('');
   const { visitMap } = useLastVisited();
   const { mapState, setMapState } = useTabState();
   const [gameModalOpen, setGameModalOpen] = useState(false);
@@ -813,6 +814,8 @@ export default function MapPage({ params }) {
     };
     load();
   }, [id, user]);
+
+  useEffect(() => { getApiBase().then(setApiBase).catch(() => {}); }, []);
 
   // ── Select a map — loads its pins ──────────────────────────────────────────
   const selectMap = async (ptId, map, currentMapsByPt = mapsByPt) => {
@@ -1190,7 +1193,7 @@ export default function MapPage({ params }) {
                       <div className="map-image-resizer">
                         <img
                           ref={imgRef}
-                          src={`${process.env.NEXT_PUBLIC_API_URL}${activeMap.image_url}`}
+                          src={`${apiBase}${activeMap.image_url}`}
                           alt={activeMap.name}
                           className="map-image"
                           draggable={false}
@@ -1441,6 +1444,7 @@ export default function MapPage({ params }) {
         onClose={() => setNewMapPtId(null)}
         onConfirm={handleCreateMap}
         uploading={uploading}
+        apiBase={apiBase}
         gameId={id}
       />
     </>

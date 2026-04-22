@@ -17,9 +17,9 @@ import Navbar from '@/components/Navbar';
 import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
 import { useAuth } from '@/context/AuthContext';
+import { api, getApiBase } from '@/utils/api';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
-import { api } from '@/utils/api';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
 
@@ -93,6 +93,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
   const [uploading,    setUploading]    = useState(false);
   const [existing,     setExisting]     = useState(null);
   const [loadingExist, setLoadingExist] = useState(false);
+  const [apiBase,      setApiBase]      = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -101,6 +102,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
       .then(data => setExisting(data))
       .catch(() => setExisting([]))
       .finally(() => setLoadingExist(false));
+    getApiBase().then(setApiBase).catch(() => {});
   }, [isOpen, gameId]);
 
   const reset = () => { setFile(null); setUrl(''); setTabIndex(0); setExisting(null); };
@@ -108,7 +110,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
 
   const handlePickExisting = (att) => {
     const label = att.original_name || att.filename;
-    onInsert(`![${label}](${process.env.NEXT_PUBLIC_API_URL}${att.url})`);
+    onInsert(`![${label}](${apiBase}${att.url})`)
     handleClose();
   };
 
@@ -120,7 +122,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
         : await api.attachments.fromUrl(gameId, 'notes', url.trim());
 
       const label = attachment.original_name || 'image';
-      onInsert(`![${label}](${process.env.NEXT_PUBLIC_API_URL}${attachment.url})`);
+      onInsert(`![${label}](${apiBase}${attachment.url})`);
       handleClose();
     } catch (err) {
       toast({ title: 'Upload failed', description: err.message, status: 'error', duration: 4000 });
@@ -190,7 +192,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
                         }}
                         _hover={{ borderColor: 'var(--color-accent)' }}>
                         <Box h="72px" overflow="hidden" style={{ background: 'var(--color-bg-page)' }}>
-                          <img src={`${process.env.NEXT_PUBLIC_API_URL}${att.url}`}
+                          <img src={`${apiBase}${att.url}`}
                             alt={att.original_name || att.filename}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </Box>
@@ -697,10 +699,11 @@ export default function NotesPage({ params }) {
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
     if (files.length === 0) return;
     e.preventDefault();
+    const base = await getApiBase();
     for (const file of files) {
       try {
         const attachment = await api.attachments.upload(id, 'notes', file);
-        handleImageInsert(`![${attachment.original_name || 'image'}](${process.env.NEXT_PUBLIC_API_URL}${attachment.url})`);
+        handleImageInsert(`![${attachment.original_name || 'image'}](${base}${attachment.url})`);
       } catch (err) {
         toast({ title: `Failed to upload ${file.name}`, description: err.message, status: 'error', duration: 4000 });
       }

@@ -10,7 +10,7 @@ import { DeleteIcon, AddIcon, ChevronRightIcon, ChevronDownIcon } from '@chakra-
 import { FiFileText, FiMap, FiTrash2, FiEdit2, FiRefreshCw, FiPaperclip } from 'react-icons/fi';
 
 import { useRouter } from 'next/navigation';
-import { api } from '@/utils/api';
+import { api, getApiBase } from '@/utils/api';
 
 import { DEFAULT_PLATFORMS } from '@/constants/platforms';
 import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
@@ -523,7 +523,7 @@ function PlaythroughRow({ pt, allPlaythroughs, gameId, onUpdated, onDeleted }) {
 
       {/* Sessions table */}
       {open && (
-        <Box borderTopWidth="1px" borderColor="var(--color-border-subtle)">
+        <Box borderTopWidth="1px" borderColor="var(--color-border-subtle)" overflowX="auto">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--color-bg-page)' }}>
@@ -733,7 +733,7 @@ function SyncCandidate({ candidate, selected, onClick }) {
   );
 }
 
-function AttachmentRow({ att, onDeleted }) {
+function AttachmentRow({ att, apiBase, onDeleted }) {
   const toast = useToast();
 
   const handleDelete = async () => {
@@ -760,7 +760,7 @@ function AttachmentRow({ att, onDeleted }) {
           border: '1px solid var(--color-border-subtle)',
         }}>
           <img
-            src={`${process.env.NEXT_PUBLIC_API_URL}${att.url}`}
+            src={`${apiBase}${att.url}`}
             alt={att.original_name || att.filename}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
@@ -861,6 +861,7 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const [releasesExpanded, setReleasesExpanded] = useState(false);
   const [attachmentsExpanded, setAttachmentsExpanded] = useState(false);
   const [attachments,         setAttachments]         = useState(null); // null = not yet fetched
+  const [apiBase,             setApiBase]             = useState('');
   const [showAddPT,       setShowAddPT]       = useState(false);
   const [showSync,        setShowSync]        = useState(false);
   const [editingTitle,    setEditingTitle]    = useState(false);
@@ -891,6 +892,7 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       api.igdb.getCredentials().then((creds) => {
         setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
       }).catch(() => setHasIgdbCredentials(false));
+    getApiBase().then(setApiBase).catch(() => {});
   }, [isOpen]);
 
   // Load user's configured platform list
@@ -1237,6 +1239,7 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                                 <AttachmentRow
                                   key={att.id}
                                   att={att}
+                                  apiBase={apiBase}
                                   onDeleted={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
                                 />
                               ))}
@@ -1259,6 +1262,7 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                                 <AttachmentRow
                                   key={att.id}
                                   att={att}
+                                  apiBase={apiBase}
                                   onDeleted={(id) => setAttachments(prev => prev.filter(a => a.id !== id))}
                                 />
                               ))}
