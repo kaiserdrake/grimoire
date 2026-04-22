@@ -178,7 +178,7 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
 
 // ── BulletinRow ───────────────────────────────────────────────────────────────
 
-const BULLETIN_HOLD_DURATION = 3000;
+const BULLETIN_HOLD_DURATION = 1800;
 
 function BulletinHoldToDelete({ onDelete, hasCover }) {
   const [progress, setProgress] = useState(0);

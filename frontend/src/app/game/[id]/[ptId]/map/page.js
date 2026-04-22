@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2 } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -177,9 +177,9 @@ const PinIcon = ({ color, icon = 'location' }) => {
 };
 
 // ── Hold-to-delete ────────────────────────────────────────────────────────────
-const HOLD_DURATION = 3000;
+const HOLD_DURATION = 1800;
 
-function HoldToDelete({ onDelete }) {
+function HoldToDelete({ onDelete, inMap = false }) {
   const [progress, setProgress] = useState(0);
   const [holding,  setHolding]  = useState(false);
   const startRef = useRef(null);
@@ -222,10 +222,16 @@ function HoldToDelete({ onDelete }) {
 
   return (
     <Tooltip label="Hold to delete" hasArrow placement="top" openDelay={400}>
-      <Box as="button"
+    <Box as="button"
         display="inline-flex" alignItems="center" justifyContent="center"
-        borderRadius="md" border="none" cursor="pointer" background="none"
-        color={holding ? 'var(--color-danger)' : 'var(--color-text-muted)'}
+        borderRadius={inMap ? '4px' : 'md'}
+        border="none"
+        cursor="pointer"
+        background="transparent"
+        style={inMap ? { width: '22px', height: '22px', transition: 'color 0.15s, background 0.15s' } : {}}
+        color={holding
+          ? (inMap ? 'rgba(255,120,120,0.9)' : 'var(--color-danger)')
+          : (inMap ? 'rgba(255,255,255,0.45)' : 'var(--color-text-muted)')}
         onMouseDown={start} onMouseUp={stop} onMouseLeave={stop}
         onTouchStart={start} onTouchEnd={stop}
         style={{ padding: 2, transition: 'color 0.15s' }}
@@ -264,42 +270,51 @@ function disambiguatePinLabels(pins) {
   });
 }
 
-// ── Add Pin Modal ─────────────────────────────────────────────────────────────
-function AddPinModal({ isOpen, onClose, onAdd }) {
-  const [label,   setLabel]   = useState('');
-  const [desc,    setDesc]    = useState('');
-  const [color,   setColor]   = useState('blue');
-  const [icon,    setIcon]    = useState('location');
-  const [saving,  setSaving]  = useState(false);
+// ── Pin Modal (Add & Edit) ────────────────────────────────────────────────────
+function PinModal({ isOpen, onClose, onSave, onDelete, pin, defaultLabel }) {
+  const [label,  setLabel]  = useState('');
+  const [desc,   setDesc]   = useState('');
+  const [color,  setColor]  = useState('blue');
+  const [icon,   setIcon]   = useState('location');
+  const [saving, setSaving] = useState(false);
   const labelRef = useRef(null);
 
-  // Reset form when opening
+  const isEdit = Boolean(pin);
+
   useEffect(() => {
     if (isOpen) {
-      setLabel('');
-      setDesc('');
-      setColor('blue');
-      setIcon('location');
+      if (isEdit) {
+        const { color: c, icon: ic } = parsePinStyle(pin.color);
+        setLabel(pin.label || '');
+        setDesc(pin.description || '');
+        setColor(c);
+        setIcon(ic);
+      } else {
+        setLabel(defaultLabel || '');
+        setDesc('');
+
+        setColor('blue');
+        setIcon('location');
+      }
       setSaving(false);
       setTimeout(() => labelRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isOpen, pin]);
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!label.trim()) return;
     setSaving(true);
     try {
-      await onAdd({ label: label.trim(), description: desc.trim() || null, color: encodePinStyle(color, icon) });
+
+      await onSave({ label: label.trim(), description: desc.trim() || null, color: encodePinStyle(color, icon) });
     } finally {
+
       setSaving(false);
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAdd();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSave(); }
   };
 
   return (
@@ -310,7 +325,7 @@ function AddPinModal({ isOpen, onClose, onAdd }) {
         border: '1px solid var(--color-border)',
         color: 'var(--color-text-primary)',
       }}>
-        <ModalHeader fontSize="sm" pb={2}>Add Pin</ModalHeader>
+        <ModalHeader fontSize="sm" pb={2}>{isEdit ? 'Edit Pin' : 'Add Pin'}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           <VStack spacing={3} align="stretch">
@@ -322,9 +337,9 @@ function AddPinModal({ isOpen, onClose, onAdd }) {
                 value={label}
                 onChange={e => setLabel(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Pin label"
                 style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
               />
+
             </FormControl>
             <FormControl>
               <FormLabel fontSize="xs" style={{ color: 'var(--color-text-secondary)' }}>Description</FormLabel>
@@ -350,14 +365,10 @@ function AddPinModal({ isOpen, onClose, onAdd }) {
                       style={{
                         padding: '4px',
                         borderRadius: '6px',
-                        border: icon === t.id
-                          ? '2px solid var(--color-accent)'
-                          : '2px solid transparent',
+                        border: icon === t.id ? '2px solid var(--color-accent)' : '2px solid transparent',
                         background: icon === t.id ? 'var(--color-accent-subtle)' : 'var(--color-bg-subtle)',
                         cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         transition: 'border-color 0.1s, background 0.1s',
                       }}
                     >
@@ -382,36 +393,29 @@ function AddPinModal({ isOpen, onClose, onAdd }) {
                     background={`var(--color-pin-${c})`}
                     onClick={() => setColor(c)}
                     style={{
-                      outline: color === c ? '3px solid var(--color-text-primary)' : '2px solid transparent',
-                      cursor: 'pointer', padding: 0,
+                      outline: color === c ? '2px solid var(--color-accent)' : '2px solid transparent',
+                      outlineOffset: '2px',
+                      cursor: 'pointer',
                     }}
                   />
                 ))}
               </HStack>
             </FormControl>
-
-            {/* Live preview */}
-            <Box display="flex" alignItems="center" gap={2} pt={1}>
-              <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>Preview:</Text>
-              <div style={{ width: 32, height: 32 }}>
-                <PinIcon color={color} icon={icon} />
-              </div>
-            </Box>
           </VStack>
         </ModalBody>
-        <ModalFooter gap={2} pt={3}>
+        <ModalFooter gap={2} pt={2}>
+          {isEdit && (
+            <HoldToDelete onDelete={onDelete} />
+          )}
+          <div style={{ flex: 1 }} />
           <Button size="sm" variant="ghost" onClick={onClose}
             style={{ color: 'var(--color-text-secondary)' }}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            isLoading={saving}
-            isDisabled={!label.trim()}
-            onClick={handleAdd}
-            style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}
-          >
-            Add
+          <Button size="sm" isLoading={saving} isDisabled={!label.trim()}
+            onClick={handleSave}
+            style={{ background: 'var(--color-accent)', color: 'white' }}>
+            {isEdit ? 'Save' : 'Add Pin'}
           </Button>
         </ModalFooter>
       </ModalContent>
@@ -747,6 +751,7 @@ export default function MapPage({ params }) {
   // ── Pin placement — modal flow ─────────────────────────────────────────────
   const [pendingPin,      setPendingPin]      = useState(null); // { x_percent, y_percent }
   const [showPinModal,    setShowPinModal]    = useState(false);
+  const [editingPin, setEditingPin] = useState(null); // pin object being edited
 
   // ── Pin dragging (pin mode only) ────────────────────────────────────────────
   const [draggingPin,  setDraggingPin]  = useState(null); // { pinId, x_percent, y_percent }
@@ -909,6 +914,8 @@ export default function MapPage({ params }) {
     if (!imgRef.current) return;
     // Don't open pin modal if we just finished dragging
     if (draggingRef.current) return;
+    setOpenPinId(null);
+    setActivePinId(null);
     const rect = imgRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left)  / rect.width)  * 100;
     const y = ((e.clientY - rect.top)   / rect.height) * 100;
@@ -916,6 +923,7 @@ export default function MapPage({ params }) {
     if (toolMode === 'pin') {
       setPendingPin({ x_percent: x, y_percent: y });
       setShowPinModal(true);
+      // defaultLabel is computed inline in the JSX via activePins.length
     } else if (toolMode === 'path') {
       const newWp = { x_percent: x, y_percent: y, id: Date.now() };
       setPathWaypoints(prev => [...prev, newWp]);
@@ -944,6 +952,25 @@ export default function MapPage({ params }) {
   const handleCancelPinModal = () => {
     setPendingPin(null);
     setShowPinModal(false);
+  };
+
+  // ── Edit existing pin ───────────────────────────────────────────────────────
+  const handleEditPin = async ({ label, description, color }) => {
+    try {
+      const updated = await api.pins.update(activeMap.id, editingPin.id, { label, description, color });
+      setPinsByMap(prev => ({
+        ...prev,
+        [activeMap.id]: prev[activeMap.id].map(p => p.id === updated.id ? updated : p),
+      }));
+      setEditingPin(null);
+    } catch (err) {
+      toast({ title: 'Failed to update pin', description: err.message, status: 'error', duration: 3000 });
+      throw err;
+    }
+  };
+
+  const openEditPin = (pin) => {
+    setEditingPin(pin);
   };
 
   // ── Delete pin ──────────────────────────────────────────────────────────────
@@ -1332,80 +1359,94 @@ export default function MapPage({ params }) {
                               filter: isDragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' : undefined,
                               zIndex: isDragging ? 50 : isHovered ? 30 : undefined,
                             }}
-                            onMouseDown={toolMode === 'pin' ? (e) => handlePinDragStart(e, pin) : undefined}
-                            onMouseEnter={() => {
-                              if (toolMode !== 'none' || isDragging) return;
-                              setOpenPinId(pin.id);
+                            onMouseDown={toolMode === 'pin' ? (e) => { handlePinDragStart(e, pin); setOpenPinId(null); } : undefined}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (toolMode === 'pin') { openEditPin(pin); return; }
+                              setOpenPinId(prev => prev === pin.id ? null : pin.id);
                               setActivePinId(pin.id);
                             }}
-                            onMouseLeave={() => {
-                              if (toolMode !== 'none') return;
-                              setOpenPinId(null);
-                              setActivePinId(null);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
                           >
                             <PinIcon color={pinColor} icon={pinIcon} />
-
-                            {/* Hover tooltip */}
+                            {/* Pin tooltip */}
                             {isHovered && (
                               <div
-                                onMouseEnter={() => { setOpenPinId(pin.id); setActivePinId(pin.id); }}
-                                onMouseLeave={() => { setOpenPinId(null); setActivePinId(null); }}
+                                onClick={(e) => e.stopPropagation()}
                                 style={{
                                   position: 'absolute',
-                                  bottom: 'calc(100% + 6px)',
+                                  bottom: 'calc(100% + 8px)',
                                   left: '50%',
                                   transform: 'translateX(-50%)',
-                                  background: 'var(--color-bg-surface)',
-                                  border: '1px solid var(--color-border)',
-                                  borderRadius: '6px',
-                                  padding: '6px 8px',
-                                  minWidth: '120px',
-                                  maxWidth: '200px',
-                                  whiteSpace: 'pre-wrap',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
                                   zIndex: 100,
                                   pointerEvents: 'auto',
-                                  cursor: 'default',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                               >
-                                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '6px' }}>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: '11px', lineHeight: 1.3, color: 'var(--color-text-primary)' }}>
+                                {/* Callout */}
+                                <div style={{
+                                  background: 'rgba(10, 10, 14, 0.88)',
+                                  backdropFilter: 'blur(10px)',
+                                  WebkitBackdropFilter: 'blur(10px)',
+                                  border: '1px solid rgba(255,255,255,0.08)',
+                                  borderRadius: '7px',
+                                  minWidth: '120px',
+                                  maxWidth: '200px',
+                                  cursor: 'default',
+                                  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                                  overflow: 'hidden',
+                                }}>
+                                  {/* Header row: label + action buttons */}
+
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '6px',
+                                    padding: '4px 4px 4px 8px',
+                                    borderBottom: pin.description ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                                  }}>
+                                    <div style={{ fontWeight: 600, fontSize: '10px', lineHeight: 1.3, color: 'rgba(255,255,255,0.95)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                                       {pin.displayLabel}
                                     </div>
-                                    {pin.description && (
-                                      <div style={{ fontSize: '10px', marginTop: '3px', lineHeight: 1.4, color: 'var(--color-text-secondary)' }}>
-                                        {pin.description}
-                                      </div>
-                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                      <Tooltip label="Edit" hasArrow placement="top" openDelay={400}>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); openEditPin(pin); }}
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                            width: '22px', height: '22px', borderRadius: '4px',
+                                            background: 'transparent', border: 'none',
+                                            color: 'rgba(255,255,255,0.45)', cursor: 'pointer',
+                                            transition: 'color 0.15s, background 0.15s',
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; e.currentTarget.style.background = 'transparent'; }}
+                                        >
+                                          <FiEdit2 size={10} />
+                                        </button>
+                                      </Tooltip>
+                                      <HoldToDelete onDelete={() => handleDeletePin(pin.id)} inMap />
+                                    </div>
                                   </div>
-                                  {toolMode === 'pin' ? (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleDeletePin(pin.id); }}
-                                      style={{
-                                        background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-                                        color: 'var(--color-danger)', flexShrink: 0, display: 'flex', alignItems: 'center',
-                                      }}
-                                    >
-                                      <FiTrash2 size={11} />
-                                    </button>
-                                  ) : (
-                                    <HoldToDelete onDelete={() => handleDeletePin(pin.id)} />
+                                  {/* Description */}
+                                  {pin.description && (
+                                    <div style={{ fontSize: '9px', lineHeight: 1.4, color: 'rgba(255,255,255,0.5)', padding: '4px 8px 5px', whiteSpace: 'pre-wrap' }}>
+                                      {pin.description}
+                                    </div>
                                   )}
                                 </div>
                                 {/* Arrow */}
                                 <div style={{
-                                  position: 'absolute',
-                                  bottom: '-5px', left: '50%',
-                                  transform: 'translateX(-50%)',
-                                  width: '8px', height: '8px',
-                                  background: 'var(--color-bg-surface)',
-                                  border: '1px solid var(--color-border)',
+                                  width: '7px', height: '7px',
+                                  background: 'rgba(10, 10, 14, 0.88)',
+                                  border: '1px solid rgba(255,255,255,0.08)',
                                   borderTop: 'none', borderLeft: 'none',
-                                  transform: 'translateX(-50%) rotate(45deg)',
+                                  transform: 'rotate(45deg)',
+                                  marginTop: '-4px',
+                                  flexShrink: 0,
                                 }} />
                               </div>
                             )}
@@ -1431,11 +1472,16 @@ export default function MapPage({ params }) {
         />
       )}
 
-      {/* ── Add Pin Modal ── */}
-      <AddPinModal
-        isOpen={showPinModal}
-        onClose={handleCancelPinModal}
-        onAdd={handleAddPin}
+      {/* ── Pin Modal ── */}
+      <PinModal
+        isOpen={showPinModal || editingPin !== null}
+        onClose={() => {
+          if (editingPin) { setEditingPin(null); }
+          else { handleCancelPinModal(); }
+        }}
+        onSave={editingPin ? handleEditPin : handleAddPin}
+        pin={editingPin ?? undefined}
+        defaultLabel={`Pin ${activePins.length + 1}`}
       />
 
       {/* ── Map Modal ── */}
