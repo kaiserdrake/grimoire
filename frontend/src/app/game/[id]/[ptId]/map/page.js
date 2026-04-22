@@ -694,7 +694,8 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
               style={{ color: 'var(--color-text-secondary)' }}>
               Cancel
             </Button>
-            <Button size="sm" isLoading={uploading} isDisabled={!canSubmit}
+            <Button size="sm" isLoading={uploading} loadingText="Uploading…" spinnerPlacement="start"
+              isDisabled={!canSubmit}
               onClick={() => onConfirm({
                 name: name.trim(),
                 attachmentId: selectedAtt?.id,

@@ -239,7 +239,8 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
           <ModalFooter style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
             <HStack spacing={2}>
               <Button size="sm" variant="ghost" onClick={handleClose}>Cancel</Button>
-              <Button size="sm" isLoading={uploading} isDisabled={!canInsert} onClick={handleInsert}
+              <Button size="sm" isLoading={uploading} loadingText="Uploading…" spinnerPlacement="start"
+                isDisabled={!canInsert} onClick={handleInsert}
                 style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}>
                 Insert
               </Button>
