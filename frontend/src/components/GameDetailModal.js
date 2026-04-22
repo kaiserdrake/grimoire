@@ -69,7 +69,7 @@ function derivePlaythroughStatus(sessions, fallback) {
 
 // ── Hold-to-delete button ─────────────────────────────────────────────────────
 
-const HOLD_DURATION = 3000;
+const HOLD_DURATION = 1800;
 
 function HoldToDelete({ onDelete, label = '', size = 'sm', icon = <DeleteIcon /> }) {
   const [progress, setProgress]   = useState(0);   // 0–1

@@ -475,7 +475,7 @@ function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
 }
 
 // ── Hold-to-delete ────────────────────────────────────────────────────────────
-const HOLD_DURATION = 3000;
+const HOLD_DURATION = 1800;
 
 function HoldToDelete({ onDelete }) {
   const [progress, setProgress] = useState(0);
