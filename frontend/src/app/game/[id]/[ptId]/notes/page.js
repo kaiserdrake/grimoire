@@ -573,6 +573,7 @@ export default function NotesPage({ params }) {
   const [drawerOpen, setDrawerOpen]         = useState(false);
   const [drawerTab,  setDrawerTab]          = useState('recent');
   const [publishing, setPublishing]         = useState(false);
+  const [previewZoom, setPreviewZoom]       = useState(100);
 
   // ── All persisted via TabStateContext (survives tab switches) ─────────────
   const activePtId   = notesState.activePtId;
@@ -826,6 +827,16 @@ export default function NotesPage({ params }) {
                 )}
                 </HStack>
                 <HStack spacing={2}>
+                  {previewZoom !== 100 && (
+                    <button className="notes-zoom-reset" onClick={() => setPreviewZoom(100)}>Reset</button>
+                  )}
+                  <input
+                    type="range" min={100} max={300} step={10}
+                    value={previewZoom}
+                    onChange={e => setPreviewZoom(Number(e.target.value))}
+                    className="notes-zoom-slider"
+                  />
+                  <span className="notes-zoom-label">{previewZoom}%</span>
                   {!isPresentMode && saving && (
                     <HStack spacing={1}>
                       <Spinner size="xs" style={{ color: 'var(--color-accent)' }} />
