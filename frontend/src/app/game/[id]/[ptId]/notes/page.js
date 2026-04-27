@@ -912,7 +912,7 @@ export default function NotesPage({ params }) {
 
                 {!isPresentMode && <div className="notes-split-divider" />}
 
-                <div className="notes-preview-content notes-preview-split">
+                <div className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
                   {content.trim()
                     ? <ReactMarkdown
                         remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
