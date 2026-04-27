@@ -305,6 +305,7 @@ function BulletinRow({ post, canDelete, onRead, onDelete }) {
 // ── BulletinReadModal ─────────────────────────────────────────────────────────
 function BulletinReadModal({ post, loading, onClose }) {
   const [copied, setCopied] = useState(false);
+  const [zoom, setZoom] = useState(100);
   const gamepad = detectGamepad(post?.platform);
 
   const handleCopyLink = () => {
@@ -352,6 +353,16 @@ function BulletinReadModal({ post, loading, onClose }) {
             {loading ? 'Loading…' : (post?.title || 'Note')}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            {zoom !== 100 && (
+              <button className="notes-zoom-reset" onClick={() => setZoom(100)}>Reset</button>
+            )}
+            <input
+              type="range" min={100} max={300} step={10}
+              value={zoom}
+              onChange={e => setZoom(Number(e.target.value))}
+              className="notes-zoom-slider"
+            />
+            <span className="notes-zoom-label">{zoom}%</span>
             {post && (
               <button
                 onClick={handleCopyLink}
@@ -376,12 +387,11 @@ function BulletinReadModal({ post, loading, onClose }) {
               }}
             >✕</button>
           </div>
+
         </div>
         {/* Content */}
-        <div
-          className="notes-preview-content"
-          style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem' }}
-        >
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem' }}>
+          <div className="notes-preview-content" style={{ fontSize: `${zoom}%` }}>
           {loading ? (
             <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.875rem' }}>Loading…</div>
           ) : post?.content?.trim() ? (
@@ -399,7 +409,7 @@ function BulletinReadModal({ post, loading, onClose }) {
               Nothing to display.
             </div>
           )}
-
+          </div>
         </div>
       </div>
     </div>
