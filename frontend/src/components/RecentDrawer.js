@@ -428,7 +428,7 @@ function BulletinReadModal({ post, loading, onClose }) {
         </div>
         {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem' }}>
-          <div className="notes-preview-content" style={{ fontSize: `${zoom}%` }}>
+          <div className="notes-preview-content" style={{ zoom: `${zoom}%` }}>
           {loading ? (
             <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.875rem' }}>Loading…</div>
 
