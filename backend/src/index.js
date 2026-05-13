@@ -468,6 +468,7 @@ app.get('/api/users/:id/export', isAuthenticated, isAdmin, async (req, res) => {
   }
 });
 
+
 app.patch('/api/users/:id/email', isAuthenticated, isAdmin, async (req, res) => {
   const { id } = req.params;
   const { email } = req.body;
