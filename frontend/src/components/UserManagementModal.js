@@ -10,7 +10,7 @@ import {
   AlertDialogContent, AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
-import { FiKey } from 'react-icons/fi';
+import { FiKey, FiMail } from 'react-icons/fi';
 import { api } from '@/utils/api';
 
 export default function UserManagementModal({ isOpen, onClose }) {
@@ -21,6 +21,8 @@ export default function UserManagementModal({ isOpen, onClose }) {
   const [generatedPw, setGeneratedPw] = useState('');
   const [userToDelete, setUserToDelete] = useState(null);
   const [userToReset, setUserToReset]   = useState(null);
+  const [userToEmail, setUserToEmail] = useState(null);
+  const [newEmail, setNewEmail] = useState('');
   const [newPw, setNewPw]               = useState('');
   const cancelRef = useRef();
 
@@ -83,6 +85,21 @@ export default function UserManagementModal({ isOpen, onClose }) {
       setNewPw('');
     } catch (err) {
       toast({ title: 'Error', description: err.message, status: 'error', duration: 4000 });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleChangeEmail = async () => {
+    if (!newEmail) return;
+    setIsLoading(true);
+    try {
+      await api.users.changeEmail(userToEmail.id, { email: newEmail });
+      setUsers(users.map(u => u.id === userToEmail.id ? { ...u, email: newEmail } : u));
+      setUserToEmail(null);
+      setNewEmail('');
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -194,6 +211,29 @@ export default function UserManagementModal({ isOpen, onClose }) {
                 </Box>
               )}
 
+              {userToEmail && (
+                <Box p={4} bg="var(--color-bg-subtle)" borderRadius="md" borderWidth="1px" borderColor="var(--color-border-subtle)">
+                  <Text fontSize="sm" mb={2} color="var(--color-text-secondary)">
+                    Change email for <strong>{userToEmail.name}</strong>
+                  </Text>
+                  <HStack>
+                    <Input size="sm" type="email" placeholder="New email" value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      bg="var(--color-bg-page)" borderColor="var(--color-border)"
+                    />
+                    <Button size="sm" bg="var(--color-accent)" color="white"
+                      _hover={{ bg: 'var(--color-accent-hover)' }}
+                      onClick={handleChangeEmail} isLoading={isLoading} isDisabled={!newEmail}
+                    >
+                      Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setUserToEmail(null); setNewEmail(''); }}>
+                      Cancel
+                    </Button>
+                  </HStack>
+                </Box>
+              )}
+
               <Table size="sm" variant="simple">
                 <Thead>
                   <Tr>
@@ -221,6 +261,9 @@ export default function UserManagementModal({ isOpen, onClose }) {
                       <Td>
                         {u.id !== 1 && (
                           <HStack spacing={1}>
+                            <IconButton size="xs" variant="ghost" icon={<FiMail />} aria-label="Change email"
+                              onClick={() => { setUserToEmail(u); setNewEmail(u.email); }}
+                            />
                             <IconButton size="xs" variant="ghost" icon={<FiKey />} aria-label="Reset password"
                               onClick={() => setUserToReset(u)}
                             />
