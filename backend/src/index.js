@@ -408,6 +408,23 @@ app.patch('/api/users/:id/password', isAuthenticated, async (req, res) => {
   }
 });
 
+app.patch('/api/users/:id/email', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
+  try {
+    const result = await query(
+      'UPDATE users SET email=$1 WHERE id=$2 RETURNING id',
+      [email, parseInt(id)]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+    res.json({ message: 'Email updated.' });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ message: 'Email already in use.' });
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 // ── GAMES ─────────────────────────────────────────────────────────────────────
 app.get('/api/games', isAuthenticated, async (req, res) => {
   const { tag } = req.query;

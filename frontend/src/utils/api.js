@@ -139,6 +139,7 @@ export const api = {
     create:         (data)       => apiFetch('/api/users', { method: 'POST', body: JSON.stringify(data) }),
     delete:         (id)         => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
     changePassword: (id, data)   => apiFetch(`/api/users/${id}/password`, { method: 'PATCH', body: JSON.stringify(data) }),
+    changeEmail:    (id, data)   => apiFetch(`/api/users/${id}/email`,    { method: 'PATCH', body: JSON.stringify(data) }),
   },
 
   // Calendar
