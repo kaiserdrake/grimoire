@@ -13,6 +13,7 @@ import GameDetailModal from '@/components/GameDetailModal';
 import GameListRow from '@/components/GameListRow';
 import GameCardView from '@/components/GameCardView';
 import RecentDrawer from '@/components/RecentDrawer';
+import ExamineBacklogModal from '@/components/ExamineBacklogModal';
 import { useTabState } from '@/context/TabStateContext';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/utils/api';
@@ -164,7 +165,8 @@ function releaseDate(game) {
 export default function HomePage() {
   const { user, loading } = useAuth();
   const toast = useToast();
-  const { isOpen: isAddOpen, onOpen: onAddOpen, onClose: onAddClose } = useDisclosure();
+  const { isOpen: isAddOpen,     onOpen: onAddOpen,     onClose: onAddClose     } = useDisclosure();
+  const { isOpen: isBacklogOpen, onOpen: onBacklogOpen, onClose: onBacklogClose } = useDisclosure();
 
   const [games, setGames]               = useState([]);
   const [fetching, setFetching]         = useState(false);
@@ -543,6 +545,20 @@ export default function HomePage() {
               {/* Spacer */}
               <Box flex={1} />
 
+              {/* Examine Backlog */}
+              <Button
+                size="sm"
+                leftIcon={<BacklogIcon size={14} />}
+                variant="outline"
+                borderColor="var(--color-border)"
+                color="var(--color-text-muted)"
+                _hover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+                onClick={onBacklogOpen}
+                flexShrink={0}
+              >
+                Backlog
+              </Button>
+
               {/* Add Game — right-aligned */}
               <Button
                 size="sm"
@@ -644,6 +660,7 @@ export default function HomePage() {
         onClose={onAddClose}
         onAdded={async (game) => { await fetchGames(); setSelectedGame(game); }}
       />
+      <ExamineBacklogModal isOpen={isBacklogOpen} onClose={onBacklogClose} />
       {selectedGame && (
         <GameDetailModal
           game={selectedGame}
