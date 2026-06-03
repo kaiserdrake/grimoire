@@ -13,6 +13,13 @@ import { isAuthenticated, isAdmin } from './auth.js';
 
 dotenv.config();
 
+const formatBytes = (bytes) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
+
 const app = express();
 const PORT = 3001;
 
@@ -349,7 +356,14 @@ app.get('/api/me', isAuthenticated, (req, res) => {
 // ── USERS (admin) ─────────────────────────────────────────────────────────────
 app.get('/api/users', isAuthenticated, isAdmin, async (req, res) => {
   try {
-    const result = await query('SELECT id, name, email, role, created_at FROM users ORDER BY created_at');
+    const result = await query(`
+      SELECT u.id, u.name, u.email, u.role, u.storage_quota, u.created_at,
+             COALESCE(SUM(a.file_size), 0)::BIGINT AS disk_usage
+      FROM users u
+      LEFT JOIN game_attachments a ON a.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });
@@ -1025,13 +1039,31 @@ app.post('/api/games/:gameId/attachments/:set', isAuthenticated, (req, res, next
       return res.status(404).json({ message: 'Game not found.' });
     }
 
+    // ── Quota check helper (Normal Users only) ──
+    const checkQuota = async (additionalBytes) => {
+      if (req.user.role !== 'Normal User') return null;
+      const [usageRes, quotaRes] = await Promise.all([
+        query('SELECT COALESCE(SUM(file_size), 0)::BIGINT AS usage FROM game_attachments WHERE user_id=$1', [userId]),
+        query('SELECT storage_quota FROM users WHERE id=$1', [userId]),
+      ]);
+      const currentUsage = parseInt(usageRes.rows[0].usage) || 0;
+      const quota = parseInt(quotaRes.rows[0].storage_quota) || 5368709120;
+      if (currentUsage + additionalBytes > quota) return quota - currentUsage;
+      return null;
+    };
+
     // ── Case 1: local file upload ──
     if (req.file) {
+      const remaining = await checkQuota(req.file.size);
+      if (remaining !== null) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(413).json({ message: `Storage quota exceeded. You have ${formatBytes(remaining)} remaining.` });
+      }
       const url = `/uploads/games/${gameId}/${set}/${req.file.filename}`;
       const result = await query(
-        `INSERT INTO game_attachments (game_id, user_id, set_type, filename, original_name, mime_type, file_path, url, source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'upload') RETURNING id, set_type, filename, original_name, mime_type, url, source, created_at`,
-        [gameId, userId, set, req.file.filename, req.file.originalname, req.file.mimetype, req.file.path, url]
+        `INSERT INTO game_attachments (game_id, user_id, set_type, filename, original_name, mime_type, file_path, url, source, file_size)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'upload',$9) RETURNING id, set_type, filename, original_name, mime_type, url, source, created_at`,
+        [gameId, userId, set, req.file.filename, req.file.originalname, req.file.mimetype, req.file.path, url, req.file.size]
       );
       return res.status(201).json(result.rows[0]);
     }
@@ -1051,6 +1083,14 @@ app.post('/api/games/:gameId/attachments/:set', isAuthenticated, (req, res, next
       return res.status(422).json({ message: 'URL does not point to an image.' });
     }
 
+    const buffer = await fetchRes.arrayBuffer();
+    const fileSize = buffer.byteLength;
+
+    const remaining = await checkQuota(fileSize);
+    if (remaining !== null) {
+      return res.status(413).json({ message: `Storage quota exceeded. You have ${formatBytes(remaining)} remaining.` });
+    }
+
     const extMap = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
     const ext = extMap[contentType.split(';')[0].trim()] || '.jpg';
     const filename = `${crypto.randomUUID()}${ext}`;
@@ -1058,16 +1098,15 @@ app.post('/api/games/:gameId/attachments/:set', isAuthenticated, (req, res, next
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, filename);
 
-    const buffer = await fetchRes.arrayBuffer();
     fs.writeFileSync(filePath, Buffer.from(buffer));
 
     const url = `/uploads/games/${gameId}/${set}/${filename}`;
     const originalName = path.basename(new URL(sourceUrl).pathname) || filename;
 
     const result = await query(
-      `INSERT INTO game_attachments (game_id, user_id, set_type, filename, original_name, mime_type, file_path, url, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'url') RETURNING id, set_type, filename, original_name, mime_type, url, source, created_at`,
-      [gameId, userId, set, filename, originalName, contentType, filePath, url]
+      `INSERT INTO game_attachments (game_id, user_id, set_type, filename, original_name, mime_type, file_path, url, source, file_size)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'url',$9) RETURNING id, set_type, filename, original_name, mime_type, url, source, created_at`,
+      [gameId, userId, set, filename, originalName, contentType, filePath, url, fileSize]
     );
     return res.status(201).json(result.rows[0]);
 
@@ -1450,4 +1489,11 @@ app.get('/api/bulletin/:id/content', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Grimoire backend running on port ${PORT}`));
+async function runMigrations() {
+  await query(`ALTER TABLE game_attachments ADD COLUMN IF NOT EXISTS file_size BIGINT NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS storage_quota BIGINT NOT NULL DEFAULT 5368709120`);
+}
+
+runMigrations()
+  .then(() => app.listen(PORT, () => console.log(`Grimoire backend running on port ${PORT}`)))
+  .catch((err) => { console.error('Migration failed:', err); process.exit(1); });

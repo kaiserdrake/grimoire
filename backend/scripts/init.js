@@ -49,14 +49,15 @@ const createTables = async () => {
 
   await query(`
     CREATE TABLE users (
-      id            SERIAL PRIMARY KEY,
-      email         VARCHAR(255) UNIQUE NOT NULL,
-      name          VARCHAR(255) UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      role          user_role NOT NULL DEFAULT 'Normal User',
-      igdb_client_id     TEXT,
+      id              SERIAL PRIMARY KEY,
+      email           VARCHAR(255) UNIQUE NOT NULL,
+      name            VARCHAR(255) UNIQUE NOT NULL,
+      password_hash   TEXT NOT NULL,
+      role            user_role NOT NULL DEFAULT 'Normal User',
+      storage_quota   BIGINT NOT NULL DEFAULT 5368709120,
+      igdb_client_id  TEXT,
       igdb_client_secret TEXT,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -145,6 +146,7 @@ const createTables = async () => {
       file_path     TEXT NOT NULL,
       url           TEXT NOT NULL,
       source        TEXT NOT NULL DEFAULT 'upload',
+      file_size     BIGINT NOT NULL DEFAULT 0,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);

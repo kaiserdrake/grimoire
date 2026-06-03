@@ -5,13 +5,23 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton,
   ModalBody, ModalFooter, Button, VStack, HStack, Text, Table,
   Thead, Tbody, Tr, Th, Td, IconButton, useToast, Badge, Input,
-  FormControl, FormLabel, Select, Code, Box,
+  FormControl, FormLabel, Select, Code, Box, Progress, Tooltip,
   AlertDialog, AlertDialogBody, AlertDialogFooter, AlertDialogHeader,
   AlertDialogContent, AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
 import { FiKey, FiMail } from 'react-icons/fi';
 import { api } from '@/utils/api';
+
+const QUOTA_5GB = 5 * 1024 * 1024 * 1024;
+
+const formatBytes = (bytes) => {
+  const b = Number(bytes);
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
 
 export default function UserManagementModal({ isOpen, onClose }) {
   const toast = useToast();
@@ -107,7 +117,7 @@ export default function UserManagementModal({ isOpen, onClose }) {
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} size="xl" isCentered>
+      <Modal isOpen={isOpen} onClose={onClose} size="3xl" isCentered>
         <ModalOverlay backdropFilter="blur(4px)" />
         <ModalContent
           bg="var(--color-bg-surface)"
@@ -240,42 +250,70 @@ export default function UserManagementModal({ isOpen, onClose }) {
                     <Th color="var(--color-text-muted)">Name</Th>
                     <Th color="var(--color-text-muted)">Email</Th>
                     <Th color="var(--color-text-muted)">Role</Th>
+                    <Th color="var(--color-text-muted)">Storage</Th>
                     <Th color="var(--color-text-muted)"></Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {users.map((u) => (
-                    <Tr key={u.id} _hover={{ bg: 'var(--color-bg-subtle)' }}>
-                      <Td color="var(--color-text-primary)" fontWeight="500">{u.name}</Td>
-                      <Td color="var(--color-text-secondary)" fontSize="sm">{u.email}</Td>
-                      <Td>
-                        <Badge fontSize="0.65rem"
-                          style={{
-                            background: u.role === 'Admin' ? 'var(--color-accent-subtle)' : 'var(--color-bg-hover)',
-                            color: u.role === 'Admin' ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                          }}
-                        >
-                          {u.role}
-                        </Badge>
-                      </Td>
-                      <Td>
-                        {u.id !== 1 && (
-                          <HStack spacing={1}>
-                            <IconButton size="xs" variant="ghost" icon={<FiMail />} aria-label="Change email"
-                              onClick={() => { setUserToEmail(u); setNewEmail(u.email); }}
-                            />
-                            <IconButton size="xs" variant="ghost" icon={<FiKey />} aria-label="Reset password"
-                              onClick={() => setUserToReset(u)}
-                            />
-                            <IconButton size="xs" variant="ghost" icon={<DeleteIcon />}
-                              aria-label="Delete user" onClick={() => setUserToDelete(u)}
-                              style={{ color: 'var(--color-danger)' }}
-                            />
-                          </HStack>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
+                  {users.map((u) => {
+                    const quota = Number(u.storage_quota) || QUOTA_5GB;
+                    const used = Number(u.disk_usage) || 0;
+                    const pct = Math.min(100, (used / quota) * 100);
+                    const isNearLimit = pct >= 80;
+                    const isAdmin = u.role === 'Admin';
+                    return (
+                      <Tr key={u.id} _hover={{ bg: 'var(--color-bg-subtle)' }}>
+                        <Td color="var(--color-text-primary)" fontWeight="500">{u.name}</Td>
+                        <Td color="var(--color-text-secondary)" fontSize="sm">{u.email}</Td>
+                        <Td>
+                          <Badge fontSize="0.65rem"
+                            style={{
+                              background: isAdmin ? 'var(--color-accent-subtle)' : 'var(--color-bg-hover)',
+                              color: isAdmin ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                            }}
+                          >
+                            {u.role}
+                          </Badge>
+                        </Td>
+                        <Td minW="140px">
+                          {isAdmin ? (
+                            <Text fontSize="xs" color="var(--color-text-muted)">No limit</Text>
+                          ) : (
+                            <Tooltip label={`${formatBytes(used)} of ${formatBytes(quota)} used`} placement="top">
+                              <Box>
+                                <Text fontSize="xs" color={isNearLimit ? 'var(--color-danger)' : 'var(--color-text-secondary)'} mb={1}>
+                                  {formatBytes(used)} / {formatBytes(quota)}
+                                </Text>
+                                <Progress
+                                  value={pct}
+                                  size="xs"
+                                  borderRadius="full"
+                                  colorScheme={pct >= 95 ? 'red' : pct >= 80 ? 'orange' : 'blue'}
+                                  bg="var(--color-bg-hover)"
+                                />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Td>
+                        <Td>
+                          {u.id !== 1 && (
+                            <HStack spacing={1}>
+                              <IconButton size="xs" variant="ghost" icon={<FiMail />} aria-label="Change email"
+                                onClick={() => { setUserToEmail(u); setNewEmail(u.email); }}
+                              />
+                              <IconButton size="xs" variant="ghost" icon={<FiKey />} aria-label="Reset password"
+                                onClick={() => setUserToReset(u)}
+                              />
+                              <IconButton size="xs" variant="ghost" icon={<DeleteIcon />}
+                                aria-label="Delete user" onClick={() => setUserToDelete(u)}
+                                style={{ color: 'var(--color-danger)' }}
+                              />
+                            </HStack>
+                          )}
+                        </Td>
+                      </Tr>
+                    );
+                  })}
                 </Tbody>
               </Table>
             </VStack>
