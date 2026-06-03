@@ -47,7 +47,6 @@ const EditIcon = () => (
   </svg>
 );
 
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtHours = (h) => {
   if (!h) return null;
@@ -267,6 +266,7 @@ const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, o
   );
 };
 
+<<<<<<< HEAD
 // ── Active Game Card (horizontal strip) ───────────────────────────────────────
 const CARD_W = '80px';
 const CARD_H = '106px';
@@ -322,6 +322,12 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
   const [games, setGames]           = useState([]);
   const [activeGames, setActiveGames] = useState([]);
   const [ordered, setOrdered]       = useState([]);
+=======
+// ── Modal ─────────────────────────────────────────────────────────────────────
+export default function ExamineBacklogModal({ isOpen, onClose }) {
+  const [games, setGames]     = useState([]);
+  const [ordered, setOrdered] = useState([]);
+>>>>>>> ff5d74b (Add backlog review and priority tools)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const toast = useToast();
@@ -337,6 +343,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
     setLoading(true);
     (async () => {
       try {
+<<<<<<< HEAD
         const [allGamesResult, savedResult] = await Promise.allSettled([
           api.games.list(),
           api.settings.get('backlog_priority'),
@@ -359,6 +366,23 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
           setOrdered([...savedOrdered, ...suggestOrder(newGames)]);
         } else {
           setOrdered(suggestOrder(priorityGames));
+=======
+        const [backlogResult, savedResult] = await Promise.allSettled([
+          api.games.list('backlog'),
+          api.settings.get('backlog_priority'),
+        ]);
+        const gamesData = backlogResult.status === 'fulfilled' ? backlogResult.value : [];
+        const savedIds  = savedResult.status === 'fulfilled' && Array.isArray(savedResult.value) ? savedResult.value : [];
+
+        setGames(gamesData);
+        if (savedIds.length > 0) {
+          const byId = Object.fromEntries(gamesData.map((g) => [g.id, g]));
+          const savedOrdered = savedIds.map((id) => byId[id]).filter(Boolean);
+          const newGames = gamesData.filter((g) => !savedIds.includes(g.id));
+          setOrdered([...savedOrdered, ...suggestOrder(newGames)]);
+        } else {
+          setOrdered(suggestOrder(gamesData));
+>>>>>>> ff5d74b (Add backlog review and priority tools)
         }
       } catch (err) {
         console.error(err);
@@ -445,7 +469,11 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 Examine Backlog
               </Text>
               <Text fontSize="12px" color="var(--color-text-muted)" fontWeight="400" mt={0.5}>
+<<<<<<< HEAD
                 {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in backlog & wishlist`}
+=======
+                {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in your backlog`}
+>>>>>>> ff5d74b (Add backlog review and priority tools)
                 {saving && <Text as="span" ml={2} fontSize="11px" color="var(--color-accent)">Saving…</Text>}
               </Text>
             </Box>
@@ -474,7 +502,11 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
           ) : games.length === 0 ? (
             <Flex direction="column" align="center" justify="center" h="160px" gap={2} color="var(--color-text-muted)">
               <Text fontSize="28px">📋</Text>
+<<<<<<< HEAD
               <Text fontSize="13px">No games in your backlog or wishlist yet.</Text>
+=======
+              <Text fontSize="13px">No games in your backlog yet.</Text>
+>>>>>>> ff5d74b (Add backlog review and priority tools)
             </Flex>
           ) : (
             <VStack spacing={5} align="stretch">
@@ -504,6 +536,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 </Box>
               )}
 
+<<<<<<< HEAD
               {/* Currently Playing & Pended */}
               {activeGames.length > 0 && (
                 <Box>
@@ -517,6 +550,8 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 </Box>
               )}
 
+=======
+>>>>>>> ff5d74b (Add backlog review and priority tools)
               {/* Play Next callout */}
               {ordered.length > 0 && (() => {
                 const top = ordered[0];
