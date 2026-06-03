@@ -140,6 +140,18 @@ export const api = {
     delete:         (id)         => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
     changePassword: (id, data)   => apiFetch(`/api/users/${id}/password`, { method: 'PATCH', body: JSON.stringify(data) }),
     changeEmail:    (id, data)   => apiFetch(`/api/users/${id}/email`,    { method: 'PATCH', body: JSON.stringify(data) }),
+    export: async (id, filename) => {
+      const base = await getApiBase();
+      const res = await fetch(`${base}/api/users/${id}/export`, { credentials: 'include' });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
   },
 
   // Calendar

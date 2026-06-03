@@ -10,7 +10,7 @@ import {
   AlertDialogContent, AlertDialogOverlay,
 } from '@chakra-ui/react';
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons';
-import { FiKey, FiMail } from 'react-icons/fi';
+import { FiKey, FiMail, FiDownload } from 'react-icons/fi';
 import { api } from '@/utils/api';
 
 const QUOTA_5GB = 5 * 1024 * 1024 * 1024;
@@ -37,6 +37,15 @@ export default function UserManagementModal({ isOpen, onClose }) {
   const cancelRef = useRef();
 
   const [newUser, setNewUser] = useState({ name: '', email: '', role: 'Normal User' });
+
+  const handleExport = async (u) => {
+    try {
+      const filename = `grimoire-export-${u.name}-${new Date().toISOString().slice(0, 10)}.json`;
+      await api.users.export(u.id, filename);
+    } catch (err) {
+      toast({ title: 'Export failed', description: err.message, status: 'error', duration: 3000 });
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -296,20 +305,25 @@ export default function UserManagementModal({ isOpen, onClose }) {
                           )}
                         </Td>
                         <Td>
-                          {u.id !== 1 && (
-                            <HStack spacing={1}>
-                              <IconButton size="xs" variant="ghost" icon={<FiMail />} aria-label="Change email"
-                                onClick={() => { setUserToEmail(u); setNewEmail(u.email); }}
-                              />
-                              <IconButton size="xs" variant="ghost" icon={<FiKey />} aria-label="Reset password"
-                                onClick={() => setUserToReset(u)}
-                              />
-                              <IconButton size="xs" variant="ghost" icon={<DeleteIcon />}
-                                aria-label="Delete user" onClick={() => setUserToDelete(u)}
-                                style={{ color: 'var(--color-danger)' }}
-                              />
-                            </HStack>
-                          )}
+                          <HStack spacing={1}>
+                            <IconButton size="xs" variant="ghost" icon={<FiDownload />} aria-label="Export data"
+                              onClick={() => handleExport(u)}
+                            />
+                            {u.id !== 1 && (
+                              <>
+                                <IconButton size="xs" variant="ghost" icon={<FiMail />} aria-label="Change email"
+                                  onClick={() => { setUserToEmail(u); setNewEmail(u.email); }}
+                                />
+                                <IconButton size="xs" variant="ghost" icon={<FiKey />} aria-label="Reset password"
+                                  onClick={() => setUserToReset(u)}
+                                />
+                                <IconButton size="xs" variant="ghost" icon={<DeleteIcon />}
+                                  aria-label="Delete user" onClick={() => setUserToDelete(u)}
+                                  style={{ color: 'var(--color-danger)' }}
+                                />
+                              </>
+                            )}
+                          </HStack>
                         </Td>
                       </Tr>
                     );

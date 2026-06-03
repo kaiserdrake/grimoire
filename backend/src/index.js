@@ -422,6 +422,52 @@ app.patch('/api/users/:id/password', isAuthenticated, async (req, res) => {
   }
 });
 
+app.get('/api/users/:id/export', isAuthenticated, isAdmin, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const userResult = await query('SELECT id, name, email FROM users WHERE id=$1', [id]);
+    if (userResult.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+    const user = userResult.rows[0];
+
+    const gamesResult = await query(
+      `SELECT g.*,
+        COALESCE(
+          json_agg(
+            jsonb_build_object(
+              'id',         p.id,
+              'platform',   p.platform,
+              'label',      p.label,
+              'status',     p.status,
+              'created_at', p.created_at,
+              'updated_at', p.updated_at,
+              'sessions',   COALESCE((
+                SELECT json_agg(s.* ORDER BY s.start_date, s.created_at)
+                FROM playthrough_sessions s
+                WHERE s.playthrough_id = p.id
+              ), '[]')
+            ) ORDER BY p.created_at
+          ) FILTER (WHERE p.id IS NOT NULL),
+          '[]'
+        ) AS playthroughs
+      FROM games g
+      LEFT JOIN playthroughs p ON p.game_id = g.id AND p.user_id = g.user_id
+      WHERE g.user_id = $1
+      GROUP BY g.id
+      ORDER BY g.updated_at DESC`,
+      [user.id]
+    );
+
+    const payload = { user: { id: user.id, name: user.name, email: user.email }, games: gamesResult.rows };
+    const filename = `grimoire-export-${user.name}-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 app.patch('/api/users/:id/email', isAuthenticated, isAdmin, async (req, res) => {
   const { id } = req.params;
   const { email } = req.body;
