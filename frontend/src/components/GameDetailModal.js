@@ -1013,21 +1013,44 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
             </HStack>
           ) : (
             <HStack flex={1} minW={0} spacing={1}>
-            <Text noOfLines={1} flex={1} minW={0}>{localTitle}</Text>
-            <Tooltip label="Edit title" hasArrow placement="top" openDelay={400}>
-              <IconButton
-                size="xs" variant="ghost" aria-label="Edit title"
-                icon={<span style={{ fontSize: '11px' }}>✎</span>}
-                color="var(--color-text-muted)" _hover={{ color: 'var(--color-text-primary)' }}
-                flexShrink={0}
-                onClick={() => { setTitleDraft(localTitle); setEditingTitle(true); }}
-              />
-            </Tooltip>
+              <Text noOfLines={1} flex={1} minW={0}>{localTitle}</Text>
+              {(() => {
+                const derivedStatus = playthroughs.some(pt => pt.status === 'playing') ? 'playing'
+                  : playthroughs.some(pt => pt.status === 'pend') ? 'pend'
+                  : null;
+                if (!derivedStatus) return null;
+                const isPlaying = derivedStatus === 'playing';
+                return (
+                  <Tooltip label="Derived from playthrough status" hasArrow placement="bottom" openDelay={300}>
+                    <span style={{
+                      display: 'inline-block', flexShrink: 0,
+                      fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                      padding: '2px 7px', borderRadius: '4px',
+                      background: isPlaying ? '#B5D4F418' : '#99999918',
+                      color: isPlaying ? '#4a90d9' : '#999999',
+                      border: `1px solid ${isPlaying ? '#6aaae8' : '#999999'}`,
+                      cursor: 'default',
+                    }}>
+                      {isPlaying ? 'Playing' : 'Pended'}
+                    </span>
+                  </Tooltip>
+                );
+              })()}
+              <Tooltip label="Edit title" hasArrow placement="top" openDelay={400}>
+                <IconButton
+                  size="xs" variant="ghost" aria-label="Edit title"
+                  icon={<span style={{ fontSize: '11px' }}>✎</span>}
+                  color="var(--color-text-muted)" _hover={{ color: 'var(--color-text-primary)' }}
+                  flexShrink={0}
+                  onClick={() => { setTitleDraft(localTitle); setEditingTitle(true); }}
+                />
+              </Tooltip>
             </HStack>
           )}
           {!editingTitle && (
             <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-              {Object.entries(TAG_CONFIG).map(([key, cfg]) => (
+              {Object.entries(TAG_CONFIG).filter(([key]) => key !== 'playing').map(([key, cfg]) => (
                 <Tooltip key={key} label={listStatus === key ? `Remove ${cfg.label}` : cfg.label} hasArrow placement="bottom" openDelay={300}>
                   <button
                     onClick={() => handleTagChange(key)}
