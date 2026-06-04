@@ -47,6 +47,7 @@ const EditIcon = () => (
   </svg>
 );
 
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmtHours = (h) => {
   if (!h) return null;
@@ -266,10 +267,61 @@ const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, o
   );
 };
 
+// ── Active Game Card (horizontal strip) ───────────────────────────────────────
+const CARD_W = '80px';
+const CARD_H = '106px';
+
+const ActiveGameCard = ({ game }) => {
+  const activePT    = (game.playthroughs || []).find(pt => pt.status === 'playing' || pt.status === 'pend');
+  const status      = activePT?.status ?? 'playing';
+  const hasCover    = !!game.cover_url;
+  const statusColor = status === 'playing' ? '#4a90d9' : '#999999';
+  const statusLabel = status === 'playing' ? 'PLAYING' : 'PENDED';
+
+  return (
+    <Box flexShrink={0} w={CARD_W}>
+      {/* Cover */}
+      <Box
+        position="relative" w={CARD_W} h={CARD_H}
+        borderRadius="7px" overflow="hidden"
+        border="1px solid var(--color-border)"
+        bg="var(--color-surface-hover)"
+        mb={1.5}
+      >
+        {hasCover ? (
+          <Box as="img" src={game.cover_url} alt={game.title}
+            position="absolute" inset={0} w="100%" h="100%"
+            style={{ objectFit: 'cover' }}
+          />
+        ) : (
+          <Flex w="100%" h="100%" align="center" justify="center">
+            <Box color="var(--color-text-muted)"><StarIcon /></Box>
+          </Flex>
+        )}
+        {/* Status pill overlay — top-left */}
+        <Box
+          position="absolute" top="5px" left="5px"
+          px="5px" py="2px" borderRadius="3px"
+          fontSize="8px" fontWeight="700" letterSpacing="0.08em"
+          style={{ background: `${statusColor}cc`, color: '#fff' }}
+        >
+          {statusLabel}
+        </Box>
+      </Box>
+      {/* Title below cover */}
+      <Text fontSize="10px" fontWeight="600" color="var(--color-text-primary)"
+        noOfLines={2} lineHeight="1.3" textAlign="center">
+        {game.title}
+      </Text>
+    </Box>
+  );
+};
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 export default function ExamineBacklogModal({ isOpen, onClose }) {
-  const [games, setGames]     = useState([]);
-  const [ordered, setOrdered] = useState([]);
+  const [games, setGames]           = useState([]);
+  const [activeGames, setActiveGames] = useState([]);
+  const [ordered, setOrdered]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const toast = useToast();
@@ -285,21 +337,28 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
     setLoading(true);
     (async () => {
       try {
-        const [backlogResult, savedResult] = await Promise.allSettled([
-          api.games.list('backlog'),
+        const [allGamesResult, savedResult] = await Promise.allSettled([
+          api.games.list(),
           api.settings.get('backlog_priority'),
         ]);
-        const gamesData = backlogResult.status === 'fulfilled' ? backlogResult.value : [];
-        const savedIds  = savedResult.status === 'fulfilled' && Array.isArray(savedResult.value) ? savedResult.value : [];
+        const allGames = allGamesResult.status === 'fulfilled' ? allGamesResult.value : [];
+        const savedIds = savedResult.status === 'fulfilled' && Array.isArray(savedResult.value) ? savedResult.value : [];
 
-        setGames(gamesData);
+        const priorityGames = allGames.filter(g => g.tag === 'backlog' || g.tag === 'wishlist');
+        const active = allGames.filter(g =>
+          (g.playthroughs || []).some(pt => pt.status === 'playing' || pt.status === 'pend')
+        );
+
+        setGames(priorityGames);
+        setActiveGames(active);
+
         if (savedIds.length > 0) {
-          const byId = Object.fromEntries(gamesData.map((g) => [g.id, g]));
+          const byId = Object.fromEntries(priorityGames.map((g) => [g.id, g]));
           const savedOrdered = savedIds.map((id) => byId[id]).filter(Boolean);
-          const newGames = gamesData.filter((g) => !savedIds.includes(g.id));
+          const newGames = priorityGames.filter((g) => !savedIds.includes(g.id));
           setOrdered([...savedOrdered, ...suggestOrder(newGames)]);
         } else {
-          setOrdered(suggestOrder(gamesData));
+          setOrdered(suggestOrder(priorityGames));
         }
       } catch (err) {
         console.error(err);
@@ -386,7 +445,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 Examine Backlog
               </Text>
               <Text fontSize="12px" color="var(--color-text-muted)" fontWeight="400" mt={0.5}>
-                {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in your backlog`}
+                {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in backlog & wishlist`}
                 {saving && <Text as="span" ml={2} fontSize="11px" color="var(--color-accent)">Saving…</Text>}
               </Text>
             </Box>
@@ -415,7 +474,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
           ) : games.length === 0 ? (
             <Flex direction="column" align="center" justify="center" h="160px" gap={2} color="var(--color-text-muted)">
               <Text fontSize="28px">📋</Text>
-              <Text fontSize="13px">No games in your backlog yet.</Text>
+              <Text fontSize="13px">No games in your backlog or wishlist yet.</Text>
             </Flex>
           ) : (
             <VStack spacing={5} align="stretch">
@@ -441,6 +500,19 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                         <Text fontSize="11px" color="var(--color-text-muted)">×{count}</Text>
                       </HStack>
                     ))}
+                  </HStack>
+                </Box>
+              )}
+
+              {/* Currently Playing & Pended */}
+              {activeGames.length > 0 && (
+                <Box>
+                  <Text fontSize="10px" color="var(--color-text-muted)" fontWeight="600" textTransform="uppercase" letterSpacing="0.08em" mb={2}>
+                    Now Playing & Pended
+                  </Text>
+                  <HStack spacing={3} overflowX="auto" pb={1} align="flex-start"
+                    css={{ '&::-webkit-scrollbar': { height: '4px' }, '&::-webkit-scrollbar-thumb': { background: 'var(--color-border)' } }}>
+                    {activeGames.map(g => <ActiveGameCard key={g.id} game={g} />)}
                   </HStack>
                 </Box>
               )}
