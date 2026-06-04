@@ -266,10 +266,9 @@ const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, o
   );
 };
 
-<<<<<<< HEAD
 // ── Active Game Card (horizontal strip) ───────────────────────────────────────
-const CARD_W = '80px';
-const CARD_H = '106px';
+const CARD_W = '90px';
+const CARD_H = '120px';
 
 const ActiveGameCard = ({ game }) => {
   const activePT    = (game.playthroughs || []).find(pt => pt.status === 'playing' || pt.status === 'pend');
@@ -319,15 +318,9 @@ const ActiveGameCard = ({ game }) => {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 export default function ExamineBacklogModal({ isOpen, onClose }) {
-  const [games, setGames]           = useState([]);
+  const [games, setGames]             = useState([]);
   const [activeGames, setActiveGames] = useState([]);
-  const [ordered, setOrdered]       = useState([]);
-=======
-// ── Modal ─────────────────────────────────────────────────────────────────────
-export default function ExamineBacklogModal({ isOpen, onClose }) {
-  const [games, setGames]     = useState([]);
-  const [ordered, setOrdered] = useState([]);
->>>>>>> ff5d74b (Add backlog review and priority tools)
+  const [ordered, setOrdered]         = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const toast = useToast();
@@ -343,7 +336,6 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
     setLoading(true);
     (async () => {
       try {
-<<<<<<< HEAD
         const [allGamesResult, savedResult] = await Promise.allSettled([
           api.games.list(),
           api.settings.get('backlog_priority'),
@@ -366,23 +358,6 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
           setOrdered([...savedOrdered, ...suggestOrder(newGames)]);
         } else {
           setOrdered(suggestOrder(priorityGames));
-=======
-        const [backlogResult, savedResult] = await Promise.allSettled([
-          api.games.list('backlog'),
-          api.settings.get('backlog_priority'),
-        ]);
-        const gamesData = backlogResult.status === 'fulfilled' ? backlogResult.value : [];
-        const savedIds  = savedResult.status === 'fulfilled' && Array.isArray(savedResult.value) ? savedResult.value : [];
-
-        setGames(gamesData);
-        if (savedIds.length > 0) {
-          const byId = Object.fromEntries(gamesData.map((g) => [g.id, g]));
-          const savedOrdered = savedIds.map((id) => byId[id]).filter(Boolean);
-          const newGames = gamesData.filter((g) => !savedIds.includes(g.id));
-          setOrdered([...savedOrdered, ...suggestOrder(newGames)]);
-        } else {
-          setOrdered(suggestOrder(gamesData));
->>>>>>> ff5d74b (Add backlog review and priority tools)
         }
       } catch (err) {
         console.error(err);
@@ -469,11 +444,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 Examine Backlog
               </Text>
               <Text fontSize="12px" color="var(--color-text-muted)" fontWeight="400" mt={0.5}>
-<<<<<<< HEAD
                 {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in backlog & wishlist`}
-=======
-                {loading ? 'Loading…' : `${games.length} game${games.length !== 1 ? 's' : ''} in your backlog`}
->>>>>>> ff5d74b (Add backlog review and priority tools)
                 {saving && <Text as="span" ml={2} fontSize="11px" color="var(--color-accent)">Saving…</Text>}
               </Text>
             </Box>
@@ -502,11 +473,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
           ) : games.length === 0 ? (
             <Flex direction="column" align="center" justify="center" h="160px" gap={2} color="var(--color-text-muted)">
               <Text fontSize="28px">📋</Text>
-<<<<<<< HEAD
               <Text fontSize="13px">No games in your backlog or wishlist yet.</Text>
-=======
-              <Text fontSize="13px">No games in your backlog yet.</Text>
->>>>>>> ff5d74b (Add backlog review and priority tools)
             </Flex>
           ) : (
             <VStack spacing={5} align="stretch">
@@ -536,22 +503,41 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 </Box>
               )}
 
-<<<<<<< HEAD
               {/* Currently Playing & Pended */}
               {activeGames.length > 0 && (
-                <Box>
-                  <Text fontSize="10px" color="var(--color-text-muted)" fontWeight="600" textTransform="uppercase" letterSpacing="0.08em" mb={2}>
-                    Now Playing & Pended
-                  </Text>
+                <Box
+                  bg="var(--color-accent-subtle)"
+                  border="1px solid var(--color-accent)"
+                  borderRadius="10px"
+                  p={3}
+                >
+                  <HStack spacing={2} mb={3}>
+                    {/* Pulsing live dot */}
+                    <Box position="relative" w="8px" h="8px" flexShrink={0}>
+                      <Box position="absolute" inset={0} borderRadius="full" bg="var(--color-accent)"
+                        style={{ animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite', opacity: 0.6 }} />
+                      <Box position="absolute" inset={0} borderRadius="full" bg="var(--color-accent)" />
+                    </Box>
+                    <Text fontSize="11px" fontWeight="700" color="var(--color-accent)"
+                      textTransform="uppercase" letterSpacing="0.1em">
+                      Now Playing & Pended
+                    </Text>
+                    <Box
+                      ml={1} px={1.5} py={0.5} borderRadius="4px"
+                      bg="var(--color-accent)" fontSize="10px"
+                      fontWeight="700" color="white"
+                    >
+                      {activeGames.length}
+                    </Box>
+                  </HStack>
                   <HStack spacing={3} overflowX="auto" pb={1} align="flex-start"
-                    css={{ '&::-webkit-scrollbar': { height: '4px' }, '&::-webkit-scrollbar-thumb': { background: 'var(--color-border)' } }}>
+                    css={{ '&::-webkit-scrollbar': { height: '4px' }, '&::-webkit-scrollbar-thumb': { background: 'var(--color-accent)' } }}>
                     {activeGames.map(g => <ActiveGameCard key={g.id} game={g} />)}
                   </HStack>
                 </Box>
               )}
 
-=======
->>>>>>> ff5d74b (Add backlog review and priority tools)
+
               {/* Play Next callout */}
               {ordered.length > 0 && (() => {
                 const top = ordered[0];
@@ -560,8 +546,8 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                 return (
                   <Flex
                     gap={4} p={3}
-                    bg="var(--color-accent-subtle)"
-                    border="1px solid var(--color-accent)"
+                    bg="rgba(74,144,217,0.07)"
+                    border="1px solid rgba(74,144,217,0.28)"
                     borderRadius="10px"
                     align="flex-start"
                   >
@@ -593,7 +579,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                       <HStack spacing={2} mb={1}>
                         <Badge
                           fontSize="8px" px={1.5} py={0.5} borderRadius="3px"
-                          textTransform="uppercase" colorScheme="green"
+                          textTransform="uppercase" colorScheme="blue"
                         >
                           Play Next
                         </Badge>
@@ -604,7 +590,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         {topHours && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <Box color="var(--color-accent)" display="flex"><ClockIcon /></Box>
+                            <Box color="#4a90d9" display="flex"><ClockIcon /></Box>
                             <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>~{topHours} to beat</span>
                           </div>
                         )}
