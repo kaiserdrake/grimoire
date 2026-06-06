@@ -854,6 +854,8 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const toast  = useToast();
   const router = useRouter();
   const { isFocused, setFocus, clearFocus } = useFocus();
+  const focusBtnRef  = useRef(null);
+  const addPtBtnRef  = useRef(null);
 
 
   const [listStatus,      setListStatus]      = useState(game?.tag ?? null);
@@ -891,10 +893,25 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
 
   useEffect(() => {
     if (!isOpen) return;
-      api.igdb.getCredentials().then((creds) => {
-        setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
-      }).catch(() => setHasIgdbCredentials(false));
+    api.igdb.getCredentials().then((creds) => {
+      setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
+    }).catch(() => setHasIgdbCredentials(false));
     getApiBase().then(setApiBase).catch(() => {});
+  }, [isOpen]);
+
+  // Focus the relevant header button after the modal animation settles
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => {
+      const hasNoPlaythroughs = !playthroughs || playthroughs.length === 0;
+      const focused = game && isFocused(game.id);
+      if (hasNoPlaythroughs && !focused) {
+        addPtBtnRef.current?.focus();
+      } else {
+        focusBtnRef.current?.focus();
+      }
+    }, 150);
+    return () => clearTimeout(t);
   }, [isOpen]);
 
   // Load user's configured platform list
@@ -1083,8 +1100,9 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                   await setFocus({ gameId: String(game.id), ptId: String(pt.id), gameTitle: localTitle, coverUrl: game.cover_url ?? null });
                 };
                 return (
-                  <Tooltip label={label} hasArrow placement="bottom" openDelay={300}>
+                  <Tooltip label={label} hasArrow placement="bottom" openDelay={0}>
                     <button
+                      ref={focusBtnRef}
                       onClick={handleFocusClick}
                       disabled={!hasPts && !focused}
                       style={{
@@ -1187,12 +1205,14 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
             <Box>
               <HStack justify="space-between" mb={2}>
                 <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)">Playthroughs</Text>
-                <Button size="xs" leftIcon={<AddIcon />} variant="ghost" color="var(--color-text-muted)"
-                  bg="transparent" border="none" boxShadow="none"
-                  _hover={{ color: 'var(--color-text-primary)', bg: 'transparent' }}
-                  onClick={() => setShowAddPT((v) => !v)}>
-                  Add
-                </Button>
+                <Tooltip label="Add playthrough" hasArrow placement="top" openDelay={0}>
+                  <Button ref={addPtBtnRef} size="xs" leftIcon={<AddIcon />} variant="ghost" color="var(--color-text-muted)"
+                    bg="transparent" border="none" boxShadow="none"
+                    _hover={{ color: 'var(--color-text-primary)', bg: 'transparent' }}
+                    onClick={() => setShowAddPT((v) => !v)}>
+                    Add
+                  </Button>
+                </Tooltip>
               </HStack>
 
               {showAddPT && (
