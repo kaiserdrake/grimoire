@@ -133,8 +133,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
                     key={entry.gameId}
                     entry={entry}
                     isInFocus={focusGame != null && String(focusGame.gameId) === String(entry.gameId)}
-                    onNotes={() => navigate(`/game/${entry.gameId}/${entry.ptId}/notes`)}
-                    onMap={()   => navigate(`/game/${entry.gameId}/${entry.ptId}/map`)}
+                    onClick={() => navigate(`/game/${entry.gameId}/${entry.ptId}/playthrough`)}
                   />
                 ))
               )
@@ -170,12 +169,13 @@ export default function RecentDrawer({ isOpen, onToggle }) {
 }
 
 // ── RecentGameRow — shared by RecentDrawer and NotesDrawer ────────────────────
-export function RecentGameRow({ entry, isInFocus, onNotes, onMap }) {
+export function RecentGameRow({ entry, isInFocus, onClick }) {
   const hasCover = !!entry.coverUrl;
 
   return (
     <div
-      className="recent-drawer-game-row"
+      className="recent-drawer-game-row recent-drawer-game-row--clickable"
+      onClick={onClick}
       style={{
         backgroundImage:    hasCover ? `url(${entry.coverUrl})` : 'none',
         backgroundSize:     'cover',
@@ -190,32 +190,22 @@ export function RecentGameRow({ entry, isInFocus, onNotes, onMap }) {
         }} />
       )}
       <div className="recent-drawer-game-content">
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span className="recent-drawer-game-title" style={{ color: hasCover ? '#fff' : 'var(--color-text-primary)' }}>
-            {entry.gameTitle || 'Untitled'}
+        <span className="recent-drawer-game-title" style={{ color: hasCover ? '#fff' : 'var(--color-text-primary)' }}>
+          {entry.gameTitle || 'Untitled'}
+        </span>
+        {isInFocus && (
+          <span style={{
+            flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '2px',
+            fontSize: '8px', fontWeight: 700,
+            padding: '1px 5px', borderRadius: '3px',
+            background: hasCover ? 'rgba(108,71,255,0.85)' : 'var(--color-accent-subtle)',
+            color: hasCover ? '#fff' : 'var(--color-accent)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            <FiTarget size={7} />
+            in focus
           </span>
-          {isInFocus && (
-            <span style={{
-              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '2px',
-              fontSize: '8px', fontWeight: 700,
-              padding: '1px 5px', borderRadius: '3px',
-              background: hasCover ? 'rgba(108,71,255,0.85)' : 'var(--color-accent-subtle)',
-              color: hasCover ? '#fff' : 'var(--color-accent)',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-            }}>
-              <FiTarget size={7} />
-              in focus
-            </span>
-          )}
-        </div>
-        <div className="recent-drawer-game-actions">
-          <GameActionBtn onClick={onNotes} hasCover={hasCover} isInFocus={isInFocus}>
-            <FiFileText size={10} /><span>Notes</span>
-          </GameActionBtn>
-          <GameActionBtn onClick={onMap} hasCover={hasCover} isInFocus={isInFocus}>
-            <FiMap size={10} /><span>Map</span>
-          </GameActionBtn>
-        </div>
+        )}
       </div>
     </div>
   );

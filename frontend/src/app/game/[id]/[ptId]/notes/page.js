@@ -765,7 +765,7 @@ export default function NotesPage({ params }) {
   return (
     <>
       <Navbar />
-      <GameTabBar gameId={id} ptId={activePtId || initialPtId} />
+      <GameTabBar gameId={id} ptId={activePtId || initialPtId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <div className="notes-workspace">
 
         {/* ── Left: Sidebar ── */}

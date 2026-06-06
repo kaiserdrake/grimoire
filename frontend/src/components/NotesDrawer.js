@@ -126,8 +126,7 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
                     key={entry.gameId}
                     entry={entry}
                     isInFocus={focusGame != null && String(focusGame.gameId) === String(entry.gameId)}
-                    onNotes={() => navigate(`/game/${entry.gameId}/${entry.ptId}/notes`)}
-                    onMap={()   => navigate(`/game/${entry.gameId}/${entry.ptId}/map`)}
+                    onClick={() => navigate(`/game/${entry.gameId}/${entry.ptId}/playthrough`)}
                   />
                 ))
               )

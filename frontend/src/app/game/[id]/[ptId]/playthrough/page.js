@@ -327,33 +327,31 @@ function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
     <Box borderWidth="1px" borderColor="var(--color-border-subtle)" borderRadius="md" overflow="hidden" mb={2}>
       {/* Header */}
       <HStack
-        px={3} py={2} justify="space-between" align="center" cursor="pointer"
+        px={3} py={1.5} justify="space-between" align="center" cursor="pointer"
         bg="var(--color-bg-subtle)" _hover={{ bg: 'var(--color-bg-hover)' }}
         onClick={() => setOpen(v => !v)}
       >
-        <HStack spacing={2} flex={1} minW={0}>
-          <Box color="var(--color-text-muted)" flexShrink={0}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+          <span style={{ color: 'var(--color-text-muted)', flexShrink: 0, lineHeight: 1 }}>
             {open ? <ChevronDownIcon boxSize={3} /> : <ChevronRightIcon boxSize={3} />}
-          </Box>
-          <Box flex={1} minW={0}>
-            <HStack spacing={2}>
-              <Text fontSize="0.875rem" fontWeight={600} noOfLines={1} style={{ color: 'var(--color-text-primary)' }}>
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', lineHeight: 1.2 }}>
+              <span style={{
+                fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text-primary)',
+                overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+              }}>
                 {ptDisplayLabel(pt, allPlaythroughs)}
-              </Text>
+              </span>
               <StatusBadge status={status} />
-            </HStack>
-            <HStack spacing={1} mt={0.5}>
-              {pt.platform && (
-                <Text fontSize="0.72rem" style={{ color: 'var(--color-text-muted)' }}>{pt.platform}</Text>
-              )}
-              {summary ? (
-                <Text fontSize="0.72rem" style={{ color: 'var(--color-text-muted)' }}>
-                  {pt.platform ? `· ${summary}` : summary}
-                </Text>
-              ) : null}
-            </HStack>
-          </Box>
-        </HStack>
+            </div>
+            {(pt.platform || summary) && (
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', lineHeight: 1.2, marginTop: '2px' }}>
+                {[pt.platform, summary].filter(Boolean).join(' · ')}
+              </div>
+            )}
+          </div>
+        </div>
       </HStack>
 
       {/* Sessions table */}
@@ -392,6 +390,7 @@ function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
 // ── Game info card ────────────────────────────────────────────────────────────
 function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clearFocus, playthroughs }) {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  if (!game) return null;
   const summary = game.summary || '';
   const longSummary = summary.length > 280;
   const displaySummary = longSummary && !summaryExpanded ? summary.slice(0, 280) + '…' : summary;
@@ -429,62 +428,63 @@ function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clear
         )}
 
         {/* Info */}
-        <Box flex={1} minW={0}>
-          <HStack spacing={2} align="center" mb={1}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Title + focus toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', lineHeight: 1 }}>
             <button onClick={onOpenModal} style={{
               background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
             }}>
-              <Text fontSize="1.1rem" fontWeight={700} style={{ color: 'var(--color-text-primary)' }}>
+              <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1 }}>
                 {game.title}
-              </Text>
+              </span>
             </button>
             <Tooltip label={focused ? 'Remove from Focus' : hasPts ? 'Set In Focus' : 'Add a playthrough first'} hasArrow placement="top" openDelay={200}>
               <button onClick={handleFocusToggle} disabled={!hasPts && !focused} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '24px', height: '24px', borderRadius: '5px', border: 'none',
+                width: '22px', height: '22px', borderRadius: '5px', border: 'none',
                 background: focused ? 'var(--color-accent-subtle)' : 'transparent',
                 color: focused ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: (!hasPts && !focused) ? 'default' : 'pointer',
                 opacity: (!hasPts && !focused) ? 0.4 : 1,
                 flexShrink: 0, transition: 'all 0.15s',
               }}>
-                <FiTarget size={13} />
+                <FiTarget size={12} />
               </button>
             </Tooltip>
-          </HStack>
+          </div>
 
           {/* Meta grid */}
           {metaItems.length > 0 && (
-            <Box mb={2}>
+            <div style={{ marginBottom: '8px' }}>
               {metaItems.map(({ label, value }) => (
-                <HStack key={label} spacing={2} align="baseline" mb={0.5}>
-                  <Text fontSize="0.68rem" fontWeight={700} textTransform="uppercase" letterSpacing="0.06em"
-                    style={{ color: 'var(--color-text-muted)', minWidth: '72px', flexShrink: 0 }}>
-                    {label}
-                  </Text>
-                  <Text fontSize="0.78rem" style={{ color: 'var(--color-text-secondary)' }}>{value}</Text>
-                </HStack>
+                <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: '6px', lineHeight: 1.5 }}>
+                  <span style={{
+                    fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: 'var(--color-text-muted)', minWidth: '72px', flexShrink: 0,
+                  }}>{label}</span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>{value}</span>
+                </div>
               ))}
-            </Box>
+            </div>
           )}
 
           {/* Summary */}
           {summary && (
-            <Box>
-              <Text fontSize="0.78rem" style={{ color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+            <div>
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                 {displaySummary}
-              </Text>
+              </span>
               {longSummary && (
                 <button onClick={() => setSummaryExpanded(v => !v)} style={{
-                  fontSize: '0.72rem', color: 'var(--color-accent)', background: 'none',
-                  border: 'none', padding: '2px 0', cursor: 'pointer', marginTop: '2px',
+                  display: 'block', fontSize: '0.72rem', color: 'var(--color-accent)',
+                  background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', marginTop: '2px',
                 }}>
                   {summaryExpanded ? 'Show less' : 'Show more'}
                 </button>
               )}
-            </Box>
+            </div>
           )}
-        </Box>
+        </div>
       </HStack>
     </Box>
   );
@@ -524,7 +524,7 @@ export default function PlaythroughPage({ params }) {
   if (!user) return (
     <>
       <Navbar />
-      <GameTabBar gameId={id} ptId={ptId} />
+      <GameTabBar gameId={id} ptId={ptId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <Flex justify="center" align="center" height="calc(100vh - 94px)">
         <Text style={{ color: 'var(--color-text-muted)' }}>Please sign in.</Text>
       </Flex>
@@ -534,7 +534,7 @@ export default function PlaythroughPage({ params }) {
   return (
     <>
       <Navbar />
-      <GameTabBar gameId={id} ptId={ptId} />
+      <GameTabBar gameId={id} ptId={ptId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
 
       <div style={{
@@ -548,6 +548,12 @@ export default function PlaythroughPage({ params }) {
         {loading ? (
           <Flex justify="center" align="center" height="200px">
             <Spinner style={{ color: 'var(--color-accent)' }} />
+          </Flex>
+        ) : !game ? (
+          <Flex justify="center" align="center" height="200px">
+            <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+              Game not found.
+            </Text>
           </Flex>
         ) : (
           <>

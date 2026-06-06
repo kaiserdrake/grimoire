@@ -71,7 +71,7 @@ export default function Navbar() {
   const { isOpen: isSettingsOpen, onOpen: onSettingsOpen, onClose: onSettingsClose } = useDisclosure();
   const { isOpen: isUsersOpen,    onOpen: onUsersOpen,    onClose: onUsersClose    } = useDisclosure();
 
-  const focusPath = focusGame ? `/game/${focusGame.gameId}/${focusGame.ptId}/notes` : null;
+  const focusPath = focusGame ? `/game/${focusGame.gameId}/${focusGame.ptId}/playthrough` : null;
   const isOnFocusGame = focusGame && pathname.startsWith(`/game/${focusGame.gameId}/`);
 
   const activeTab = pathname === '/calendar' ? 'calendar'
@@ -83,7 +83,7 @@ export default function Navbar() {
     { key: 'calendar', label: 'Timeline', icon: FiCalendar, href: '/calendar', enabled: true,        tooltip: null },
     { key: 'focus',    label: focusGame?.gameTitle || 'In Focus', icon: FiTarget,
       href: focusPath, enabled: !!focusGame,
-      tooltip: focusGame ? null : 'Set a game In Focus from its detail modal' },
+      tooltip: focusGame ? null : 'Set a game In Focus from the game list' },
   ];
 
   const handleTabClick = (tab) => {

@@ -1085,7 +1085,7 @@ export default function MapPage({ params }) {
         }
       `}</style>
       <Navbar />
-      <GameTabBar gameId={id} ptId={activePtId || initialPtId} />
+      <GameTabBar gameId={id} ptId={activePtId || initialPtId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
 
       <div className="notes-workspace">
