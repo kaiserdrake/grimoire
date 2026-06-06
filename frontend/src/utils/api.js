@@ -52,6 +52,7 @@ export const api = {
     update: (id, data) => apiFetch(`/api/games/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     updateTag: (id, tag) => apiFetch(`/api/games/${id}/tag`, { method: 'PATCH', body: JSON.stringify({ tag }) }),
     delete: (id) => apiFetch(`/api/games/${id}`, { method: 'DELETE' }),
+    fetchRatings: (id) => apiFetch(`/api/games/${id}/fetch-ratings`, { method: 'POST' }),
   },
 
   // Playthroughs

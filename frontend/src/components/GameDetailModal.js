@@ -22,6 +22,34 @@ const info = (color = 'var(--color-text-muted)') => ({
   margin: 0, fontSize: '0.75rem', lineHeight: '1.4', color,
 });
 
+const ratingColor = (score) => {
+  if (score >= 75) return '#3a7d44';
+  if (score >= 50) return '#b07d10';
+  return '#a03030';
+};
+
+function RatingBadge({ score, label }) {
+  const bg = ratingColor(score);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+      <div style={{
+        width: '40px', height: '40px', borderRadius: '8px', background: bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 800, fontSize: '0.95rem', color: 'white', letterSpacing: '-0.5px',
+        boxShadow: `0 2px 6px ${bg}55`,
+      }}>
+        {score}
+      </div>
+      <span style={{
+        fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+        letterSpacing: '0.07em', color: 'var(--color-text-muted)',
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 const inputStyle = {
   fontSize: '0.75rem', padding: '2px 6px',
   background: 'var(--color-bg-page)', border: '1px solid var(--color-border)',
@@ -584,17 +612,19 @@ function SyncPanel({ game, onSynced, onCancel }) {
     setSyncing(true);
     try {
       await api.games.update(game.id, {
-        title:        selected.title,
-        cover_url:    selected.cover_url,
-        summary:      selected.summary,
-        genres:       selected.genres,
-        series:       selected.series,
-        developer:    selected.developer,
-        publisher:    selected.publisher,
-        time_to_beat: selected.time_to_beat,
-        releases:     selected.releases,
-        tag:          game.tag,
-        igdb_id:      selected.igdb_id,
+        title:             selected.title,
+        cover_url:         selected.cover_url,
+        summary:           selected.summary,
+        genres:            selected.genres,
+        series:            selected.series,
+        developer:         selected.developer,
+        publisher:         selected.publisher,
+        time_to_beat:      selected.time_to_beat,
+        releases:          selected.releases,
+        tag:               game.tag,
+        igdb_id:           selected.igdb_id,
+        rating:            selected.rating,
+        aggregated_rating: selected.aggregated_rating,
       });
       toast({
         title: 'Sync complete',
@@ -874,6 +904,8 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const [localTitle,      setLocalTitle]      = useState(game?.title || '');
   const [platforms,       setPlatforms]       = useState(DEFAULT_PLATFORMS);
   const [hasIgdbCredentials, setHasIgdbCredentials] = useState(false);
+  const [localRating,          setLocalRating]          = useState(game?.rating          ?? null);
+  const [localAggregatedRating, setLocalAggregatedRating] = useState(game?.aggregated_rating ?? null);
 
   useEffect(() => {
     if (game) {
@@ -888,13 +920,25 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       setEditingTitle(false);
       setTitleDraft('');
       setLocalTitle(game.title || '');
+      setLocalRating(game.rating ?? null);
+      setLocalAggregatedRating(game.aggregated_rating ?? null);
     }
   }, [game]);
 
   useEffect(() => {
     if (!isOpen) return;
     api.igdb.getCredentials().then((creds) => {
-      setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
+      const hasCreds = !!creds.igdb_client_id && !!creds.igdb_client_secret;
+      setHasIgdbCredentials(hasCreds);
+      if (hasCreds && game?.igdb_id && game?.rating == null && game?.aggregated_rating == null) {
+        api.games.fetchRatings(game.id)
+          .then(({ rating, aggregated_rating }) => {
+            setLocalRating(rating);
+            setLocalAggregatedRating(aggregated_rating);
+            onUpdated?.();
+          })
+          .catch(() => {});
+      }
     }).catch(() => setHasIgdbCredentials(false));
     getApiBase().then(setApiBase).catch(() => {});
   }, [isOpen]);
@@ -1150,6 +1194,16 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                 {devPub           && <span style={info()}>{devPub}</span>}
                 {game.genres?.length > 0 && <span style={info()}>{game.genres.join(', ')}</span>}
                 {game.series      && <span style={info()}>Series: {game.series}</span>}
+                {(localAggregatedRating != null || localRating != null) && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    {localAggregatedRating != null && (
+                      <RatingBadge score={localAggregatedRating} label="Critics" />
+                    )}
+                    {localRating != null && (
+                      <RatingBadge score={localRating} label="Users" />
+                    )}
+                  </div>
+                )}
 
                 {/* Synopsis — fills remaining height */}
                 {game.summary && (
