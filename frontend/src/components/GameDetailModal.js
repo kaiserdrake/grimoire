@@ -904,8 +904,11 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const [localTitle,      setLocalTitle]      = useState(game?.title || '');
   const [platforms,       setPlatforms]       = useState(DEFAULT_PLATFORMS);
   const [hasIgdbCredentials, setHasIgdbCredentials] = useState(false);
-  const [localRating,          setLocalRating]          = useState(game?.rating          ?? null);
-  const [localAggregatedRating, setLocalAggregatedRating] = useState(game?.aggregated_rating ?? null);
+  const [localRating,           setLocalRating]           = useState(game?.rating             ?? null);
+  const [localAggregatedRating, setLocalAggregatedRating] = useState(game?.aggregated_rating  ?? null);
+  const [remarksDraft,          setRemarksDraft]          = useState(game?.remarks             || '');
+  const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState(game?.wishlist_remarks    || '');
+  const [savingRemarks,         setSavingRemarks]         = useState(false);
 
   useEffect(() => {
     if (game) {
@@ -922,6 +925,8 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       setLocalTitle(game.title || '');
       setLocalRating(game.rating ?? null);
       setLocalAggregatedRating(game.aggregated_rating ?? null);
+      setRemarksDraft(game.remarks || '');
+      setWishlistRemarksDraft(game.wishlist_remarks || '');
     }
   }, [game]);
 
@@ -1018,6 +1023,22 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       toast({ title: 'Failed to update title', description: err.message, status: 'error', duration: 3000 });
     } finally {
       setSavingTitle(false);
+    }
+  };
+
+  const handleRemarksSave = async () => {
+    setSavingRemarks(true);
+    try {
+      await api.games.updateRemarks(game.id, {
+        remarks:          remarksDraft          || null,
+        wishlist_remarks: wishlistRemarksDraft  || null,
+      });
+      toast({ title: 'Remarks saved', status: 'success', duration: 2000 });
+      onUpdated?.();
+    } catch (err) {
+      toast({ title: 'Failed to save remarks', description: err.message, status: 'error', duration: 3000 });
+    } finally {
+      setSavingRemarks(false);
     }
   };
 
@@ -1293,6 +1314,62 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                   onDeleted={(ptId) => { setPlaythroughs((prev) => prev.filter((p) => p.id !== ptId)); onUpdated?.(); }}
                 />
               ))}
+            </Box>
+
+            {/* ── Remarks ───────────────────────────────────────────────── */}
+            <Divider borderColor="var(--color-border-subtle)" />
+            <Box>
+              <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mb={2}>
+                Remarks
+              </Text>
+              <textarea
+                value={remarksDraft}
+                onChange={(e) => setRemarksDraft(e.target.value)}
+                placeholder="Add your notes or thoughts about this game…"
+                rows={3}
+                style={{
+                  width: '100%', resize: 'vertical', padding: '8px 10px',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                  background: 'var(--color-bg-page)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  color: 'var(--color-text-primary)',
+                  outline: 'none',
+                }}
+              />
+              {listStatus === 'wishlist' && (
+                <>
+                  <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mt={3} mb={2}>
+                    Wishlist Remarks
+                  </Text>
+                  <textarea
+                    value={wishlistRemarksDraft}
+                    onChange={(e) => setWishlistRemarksDraft(e.target.value)}
+                    placeholder="On which platform you want to play this game? Does the JP version supports English?"
+                    rows={3}
+                    style={{
+                      width: '100%', resize: 'vertical', padding: '8px 10px',
+                      fontSize: '0.8rem', lineHeight: 1.6,
+                      background: 'var(--color-bg-page)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '6px',
+                      color: 'var(--color-text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                </>
+              )}
+              <HStack justify="flex-end" mt={2}>
+                <Button
+                  size="xs"
+                  bg="var(--color-accent)" color="white"
+                  _hover={{ opacity: 0.85 }}
+                  isLoading={savingRemarks}
+                  onClick={handleRemarksSave}
+                >
+                  Save
+                </Button>
+              </HStack>
             </Box>
 
             {/* ── Attachments ───────────────────────────────────────────── */}

@@ -577,11 +577,14 @@ export default function PlaythroughPage({ params }) {
   const { isFocused, focusGame, setFocus, clearFocus } = useFocus();
   const { visitNotes } = useLastVisited();
 
-  const [game,          setGame]          = useState(null);
-  const [playthroughs,  setPlaythroughs]  = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [recentOpen,    setRecentOpen]    = useState(false);
-  const [gameModalOpen, setGameModalOpen] = useState(false);
+  const [game,                  setGame]                  = useState(null);
+  const [playthroughs,          setPlaythroughs]          = useState([]);
+  const [loading,               setLoading]               = useState(true);
+  const [recentOpen,            setRecentOpen]            = useState(false);
+  const [gameModalOpen,         setGameModalOpen]         = useState(false);
+  const [remarksDraft,          setRemarksDraft]          = useState('');
+  const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState('');
+  const [savingRemarks,         setSavingRemarks]         = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -590,6 +593,8 @@ export default function PlaythroughPage({ params }) {
         const g = await api.games.get(id);
         setGame(g);
         setPlaythroughs(g.playthroughs || []);
+        setRemarksDraft(g.remarks || '');
+        setWishlistRemarksDraft(g.wishlist_remarks || '');
       } catch (err) {
         toast({ title: 'Failed to load', description: err.message, status: 'error', duration: 4000 });
       } finally {
@@ -674,6 +679,79 @@ export default function PlaythroughPage({ params }) {
                 />
               ))
             )}
+
+            {/* Remarks */}
+            <Box mt={4}>
+              <Text fontSize="0.72rem" fontWeight={700} textTransform="uppercase" letterSpacing="0.08em"
+                mb={2} style={{ color: 'var(--color-text-muted)' }}>
+                Remarks
+              </Text>
+              <textarea
+                value={remarksDraft}
+                onChange={(e) => setRemarksDraft(e.target.value)}
+                placeholder="Add your notes or thoughts about this game…"
+                rows={3}
+                style={{
+                  width: '100%', resize: 'vertical', padding: '8px 10px',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                  background: 'var(--color-bg-subtle)',
+                  border: '1px solid var(--color-border-subtle)',
+                  borderRadius: '6px',
+                  color: 'var(--color-text-primary)',
+                  outline: 'none',
+                }}
+              />
+              {game.tag === 'wishlist' && (
+                <>
+                  <Text fontSize="0.72rem" fontWeight={700} textTransform="uppercase" letterSpacing="0.08em"
+                    mt={3} mb={2} style={{ color: 'var(--color-text-muted)' }}>
+                    Wishlist Remarks
+                  </Text>
+                  <textarea
+                    value={wishlistRemarksDraft}
+                    onChange={(e) => setWishlistRemarksDraft(e.target.value)}
+                    placeholder="On which platform you want to play this game? Does the JP version supports English?"
+                    rows={3}
+                    style={{
+                      width: '100%', resize: 'vertical', padding: '8px 10px',
+                      fontSize: '0.8rem', lineHeight: 1.6,
+                      background: 'var(--color-bg-subtle)',
+                      border: '1px solid var(--color-border-subtle)',
+                      borderRadius: '6px',
+                      color: 'var(--color-text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                </>
+              )}
+              <HStack justify="flex-end" mt={2}>
+                <Button
+                  size="xs"
+                  bg="var(--color-accent)" color="white"
+                  _hover={{ opacity: 0.85 }}
+                  isLoading={savingRemarks}
+                  onClick={async () => {
+                    setSavingRemarks(true);
+                    try {
+                      await api.games.updateRemarks(game.id, {
+                        remarks:          remarksDraft         || null,
+                        wishlist_remarks: wishlistRemarksDraft || null,
+                      });
+                      const g = await api.games.get(id);
+                      setGame(g);
+                      setPlaythroughs(g.playthroughs || []);
+                      toast({ title: 'Remarks saved', status: 'success', duration: 2000 });
+                    } catch (err) {
+                      toast({ title: 'Failed to save remarks', description: err.message, status: 'error', duration: 3000 });
+                    } finally {
+                      setSavingRemarks(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </HStack>
+            </Box>
           </>
         )}
       </div>
@@ -683,7 +761,7 @@ export default function PlaythroughPage({ params }) {
           game={game}
           isOpen={gameModalOpen}
           onClose={() => setGameModalOpen(false)}
-          onUpdated={() => api.games.get(id).then(g => { setGame(g); setPlaythroughs(g.playthroughs || []); }).catch(() => {})}
+          onUpdated={() => api.games.get(id).then(g => { setGame(g); setPlaythroughs(g.playthroughs || []); setRemarksDraft(g.remarks || ''); setWishlistRemarksDraft(g.wishlist_remarks || ''); }).catch(() => {})}
           onDeleted={() => router.push('/')}
         />
       )}

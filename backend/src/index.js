@@ -688,6 +688,22 @@ app.patch('/api/games/:id/tag', isAuthenticated, async (req, res) => {
   }
 });
 
+app.patch('/api/games/:id/remarks', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const { remarks, wishlist_remarks } = req.body;
+  const userId = req.user.id;
+  try {
+    const result = await query(
+      'UPDATE games SET remarks=$1, wishlist_remarks=$2, updated_at=NOW() WHERE id=$3 AND user_id=$4 RETURNING id, remarks, wishlist_remarks',
+      [remarks ?? null, wishlist_remarks ?? null, id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 app.delete('/api/games/:id', isAuthenticated, async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
@@ -1600,6 +1616,8 @@ async function runMigrations() {
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS storage_quota BIGINT NOT NULL DEFAULT 5368709120`);
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS rating NUMERIC(5,2)`);
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS aggregated_rating NUMERIC(5,2)`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS remarks TEXT`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS wishlist_remarks TEXT`);
 }
 
 runMigrations()
