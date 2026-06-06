@@ -1212,11 +1212,11 @@ body {
 
 .recent-drawer {
   position: fixed;
-  bottom: 0;
+  top: 20%;
   right: 0;
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  align-items: flex-start;
   pointer-events: none;
   z-index: 50;
 }
@@ -1229,7 +1229,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
-  border-top: none;
+  border-bottom: none;
   border-left: none;
   transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
   pointer-events: auto;
@@ -1237,9 +1237,9 @@ body {
 .recent-drawer--open .recent-drawer-inner {
   width: 300px;
   height: 320px;
-  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
   border-left: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md) 0 0 0;
+  border-radius: 0 0 0 var(--radius-md);
 }
 
 /* The pull tab */
@@ -1267,7 +1267,7 @@ body {
   padding: 0;
   user-select: none;
   flex-shrink: 0;
-  margin-bottom: 24px; /* lift off the very bottom */
+  margin-top: 0;
 }
 .recent-drawer-pull:hover {
   background: var(--color-bg-hover);

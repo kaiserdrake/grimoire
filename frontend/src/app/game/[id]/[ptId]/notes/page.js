@@ -17,6 +17,7 @@ import rehypeRaw from 'rehype-raw';
 import Navbar from '@/components/Navbar';
 import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
+import RecentDrawer from '@/components/RecentDrawer';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
@@ -574,6 +575,7 @@ export default function NotesPage({ params }) {
   const [drawerTab,  setDrawerTab]          = useState('recent');
   const [publishing, setPublishing]         = useState(false);
   const [previewZoom, setPreviewZoom]       = useState(100);
+  const [recentOpen, setRecentOpen]         = useState(false);
 
   // ── All persisted via TabStateContext (survives tab switches) ─────────────
   const activePtId   = notesState.activePtId;
@@ -972,6 +974,7 @@ export default function NotesPage({ params }) {
         onInsert={handleImageInsert}
         gameId={id}
       />
+      <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
     </>
   );
 }
