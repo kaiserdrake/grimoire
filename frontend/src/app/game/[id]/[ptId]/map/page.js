@@ -18,6 +18,7 @@ import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
+import GameTabBar from '@/components/GameTabBar';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -560,18 +561,6 @@ function Sidebar({
           );
         })}
       </div>
-      {/* Footer — navigate to Notes */}
-      <div className="notes-sidebar-footer">
-        <button
-          className="notes-sidebar-footer-btn"
-          onClick={() => initialPtId && gameId && router.push(`/game/${gameId}/${initialPtId}/notes`)}
-          disabled={!initialPtId || !gameId}
-          title="Go to Notes for this playthrough"
-        >
-          <FiFileText size={11} style={{ flexShrink: 0 }} />
-          TO NOTES
-        </button>
-      </div>
     </div>
   );
 }
@@ -1096,6 +1085,7 @@ export default function MapPage({ params }) {
         }
       `}</style>
       <Navbar />
+      <GameTabBar gameId={id} ptId={activePtId || initialPtId} />
       <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
 
       <div className="notes-workspace">

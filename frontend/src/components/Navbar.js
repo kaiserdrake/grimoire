@@ -5,9 +5,10 @@ import {
   Box, Flex, HStack, Text, IconButton, Menu, MenuButton,
   MenuList, MenuItem, useDisclosure, Avatar, Tooltip,
 } from '@chakra-ui/react';
-import { FiBookOpen, FiSettings, FiLogOut, FiUsers, FiList, FiCalendar, FiCoffee } from 'react-icons/fi';
+import { FiBookOpen, FiSettings, FiLogOut, FiUsers, FiList, FiCalendar, FiCoffee, FiTarget } from 'react-icons/fi';
 
 import { useAuth } from '@/context/AuthContext';
+import { useFocus } from '@/context/FocusContext';
 import { usePathname, useRouter } from 'next/navigation';
 import LoginModal from './LoginModal';
 import SettingsModal from './SettingsModal';
@@ -62,6 +63,7 @@ const gravatarUrl = (email, size = 80) => {
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { focusGame }   = useFocus();
   const router   = useRouter();
   const pathname = usePathname();
 
@@ -69,11 +71,19 @@ export default function Navbar() {
   const { isOpen: isSettingsOpen, onOpen: onSettingsOpen, onClose: onSettingsClose } = useDisclosure();
   const { isOpen: isUsersOpen,    onOpen: onUsersOpen,    onClose: onUsersClose    } = useDisclosure();
 
-  const activeTab = pathname === '/calendar' ? 'calendar' : 'journal';
+  const focusPath = focusGame ? `/game/${focusGame.gameId}/${focusGame.ptId}/notes` : null;
+  const isOnFocusGame = focusGame && pathname.startsWith(`/game/${focusGame.gameId}/`);
+
+  const activeTab = pathname === '/calendar' ? 'calendar'
+    : isOnFocusGame ? 'focus'
+    : 'journal';
 
   const NAV_TABS = [
-    { key: 'journal',  label: 'List',     icon: FiList,     href: '/',         enabled: true, tooltip: null },
-    { key: 'calendar', label: 'Timeline', icon: FiCalendar, href: '/calendar', enabled: true, tooltip: null },
+    { key: 'journal',  label: 'List',     icon: FiList,     href: '/',         enabled: true,        tooltip: null },
+    { key: 'calendar', label: 'Timeline', icon: FiCalendar, href: '/calendar', enabled: true,        tooltip: null },
+    { key: 'focus',    label: focusGame?.gameTitle || 'In Focus', icon: FiTarget,
+      href: focusPath, enabled: !!focusGame,
+      tooltip: focusGame ? null : 'Set a game In Focus from its detail modal' },
   ];
 
   const handleTabClick = (tab) => {
@@ -105,35 +115,44 @@ export default function Navbar() {
               {NAV_TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.key;
-                return (
-                  <span key={tab.key}>
-                    <button
-                      onClick={() => handleTabClick(tab)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.35rem',
-                        padding: '0.35rem 0.85rem', borderRadius: '6px', border: 'none',
-                        background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
-                        color: isActive ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                        fontWeight: isActive ? 600 : 500, fontSize: '0.875rem',
-                        cursor: 'pointer', transition: 'all 0.15s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) {
-                          e.currentTarget.style.background = 'var(--color-bg-hover)';
-                          e.currentTarget.style.color = 'var(--color-text-primary)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) {
-                          e.currentTarget.style.background = 'transparent';
-                          e.currentTarget.style.color = 'var(--color-text-secondary)';
-                        }
-                      }}
-                    >
-                      <Icon size={14} />
-                      {tab.label}
-                    </button>
-                  </span>
+                const disabled = !tab.enabled;
+                const btn = (
+                  <button
+                    key={tab.key}
+                    onClick={() => handleTabClick(tab)}
+                    disabled={disabled}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.35rem',
+                      padding: '0.35rem 0.85rem', borderRadius: '6px', border: 'none',
+                      background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
+                      color: isActive ? 'var(--color-accent)' : disabled ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
+                      fontWeight: isActive ? 600 : 500, fontSize: '0.875rem',
+                      cursor: disabled ? 'default' : 'pointer', transition: 'all 0.15s ease',
+                      opacity: disabled ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive && !disabled) {
+                        e.currentTarget.style.background = 'var(--color-bg-hover)';
+                        e.currentTarget.style.color = 'var(--color-text-primary)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive && !disabled) {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                      }
+                    }}
+                  >
+                    <Icon size={14} />
+                    {tab.label}
+                  </button>
+                );
+                return tab.tooltip ? (
+                  <Tooltip key={tab.key} label={tab.tooltip} hasArrow placement="bottom" openDelay={200}>
+                    <span>{btn}</span>
+                  </Tooltip>
+                ) : (
+                  <span key={tab.key}>{btn}</span>
                 );
               })}
             </HStack>
@@ -168,17 +187,20 @@ export default function Navbar() {
                     {NAV_TABS.map((tab) => {
                       const Icon = tab.icon;
                       const isActive = activeTab === tab.key;
+                      const disabled = !tab.enabled;
                       return (
                         <MenuItem
                           key={tab.key}
                           icon={<Icon size={13} />}
-                          onClick={() => handleTabClick(tab)}
+                          onClick={() => !disabled && handleTabClick(tab)}
                           borderRadius="6px"
                           fontSize="0.82rem"
                           fontWeight={isActive ? 600 : 500}
-                          color={isActive ? 'var(--color-accent)' : 'var(--color-text-secondary)'}
+                          color={isActive ? 'var(--color-accent)' : disabled ? 'var(--color-text-muted)' : 'var(--color-text-secondary)'}
                           bg={isActive ? 'var(--color-accent-subtle)' : 'transparent'}
-                          _hover={{ bg: 'var(--color-bg-hover)', color: 'var(--color-text-primary)' }}
+                          opacity={disabled ? 0.5 : 1}
+                          cursor={disabled ? 'default' : 'pointer'}
+                          _hover={{ bg: disabled ? 'transparent' : 'var(--color-bg-hover)', color: disabled ? 'var(--color-text-muted)' : 'var(--color-text-primary)' }}
                           px={2} py={1.5}
                         >
                           {tab.label}
