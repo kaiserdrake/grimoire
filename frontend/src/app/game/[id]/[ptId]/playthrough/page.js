@@ -400,12 +400,10 @@ function RatingBadge({ score, label }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
       <div style={{
-        width: '38px', height: '38px', borderRadius: '8px', background: bg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontWeight: 800, fontSize: '0.9rem', color: 'white', letterSpacing: '-0.5px',
-        boxShadow: `0 2px 6px ${bg}55`,
+        fontWeight: 800, fontSize: '0.9rem', color: bg, letterSpacing: '-0.5px',
       }}>
-        {score}
+        {Math.round(score)}
       </div>
       <span style={{
         fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
