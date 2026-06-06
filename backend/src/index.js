@@ -186,7 +186,7 @@ app.get('/api/igdb/search', isAuthenticated, async (req, res) => {
                  involved_companies.company.name, involved_companies.developer, involved_companies.publisher,
                  release_dates.platform.name, release_dates.date, release_dates.human,
                  game_modes.name,
-                 hypes;
+                 hypes, rating, aggregated_rating;
           where id = ${igdbId};
           limit 1;
         `,
@@ -232,6 +232,8 @@ app.get('/api/igdb/search', isAuthenticated, async (req, res) => {
           publisher: publishers[0] || null,
           time_to_beat: ttbMap[g.id] || null,
           releases,
+          rating: g.rating != null ? Math.round(g.rating) : null,
+          aggregated_rating: g.aggregated_rating != null ? Math.round(g.aggregated_rating) : null,
         };
       });
       return res.json(formatted);
@@ -256,7 +258,7 @@ app.get('/api/igdb/search', isAuthenticated, async (req, res) => {
                involved_companies.company.name, involved_companies.developer, involved_companies.publisher,
                release_dates.platform.name, release_dates.date, release_dates.human,
                game_modes.name,
-               hypes;
+               hypes, rating, aggregated_rating;
         limit 10;
         where version_parent = null;
       `,
@@ -305,6 +307,8 @@ app.get('/api/igdb/search', isAuthenticated, async (req, res) => {
         publisher: publishers[0] || null,
         time_to_beat: ttbMap[g.id] || null,
         releases,
+        rating: g.rating != null ? Math.round(g.rating) : null,
+        aggregated_rating: g.aggregated_rating != null ? Math.round(g.aggregated_rating) : null,
       };
     });
     res.json(formatted);
@@ -530,13 +534,13 @@ app.get('/api/games', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/games', isAuthenticated, async (req, res) => {
-  const { igdb_id, title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, tag } = req.body;
+  const { igdb_id, title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, tag, rating, aggregated_rating } = req.body;
   if (!title) return res.status(400).json({ message: 'Title is required.' });
   const userId = req.user.id;
   try {
     const result = await query(
-      `INSERT INTO games (user_id, igdb_id, title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, tag)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO games (user_id, igdb_id, title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, tag, rating, aggregated_rating)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         userId, igdb_id || null, title, cover_url || null, summary || null,
@@ -544,6 +548,8 @@ app.post('/api/games', isAuthenticated, async (req, res) => {
         time_to_beat || null,
         releases ? JSON.stringify(releases) : null,
         tag || null,
+        rating != null ? rating : null,
+        aggregated_rating != null ? aggregated_rating : null,
       ]
     );
     res.status(201).json({ ...result.rows[0], playthroughs: [] });
@@ -590,18 +596,71 @@ app.get('/api/games/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+app.post('/api/games/:id/fetch-ratings', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  try {
+    const gameResult = await query(
+      'SELECT igdb_id FROM games WHERE id=$1 AND user_id=$2',
+      [id, userId]
+    );
+    if (gameResult.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
+    const { igdb_id } = gameResult.rows[0];
+    if (!igdb_id) return res.status(400).json({ message: 'Game has no IGDB ID.' });
+
+    const credResult = await query(
+      'SELECT igdb_client_id, igdb_client_secret FROM users WHERE id=$1',
+      [userId]
+    ).catch(() => null);
+    const clientId     = credResult?.rows[0]?.igdb_client_id     || null;
+    const clientSecret = credResult?.rows[0]?.igdb_client_secret || null;
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ message: 'IGDB credentials not configured.' });
+    }
+
+    const token = await getIgdbToken(clientId, clientSecret, userId);
+    const igdbRes = await fetch('https://api.igdb.com/v4/games', {
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      body: `fields rating, aggregated_rating; where id = ${igdb_id}; limit 1;`,
+    });
+    if (!igdbRes.ok) throw new Error('IGDB API error');
+    const games = await igdbRes.json();
+    if (!games.length) return res.status(404).json({ message: 'Game not found on IGDB.' });
+
+    const g = games[0];
+    const rating            = g.rating            != null ? Math.round(g.rating)            : null;
+    const aggregated_rating = g.aggregated_rating != null ? Math.round(g.aggregated_rating) : null;
+
+    await query(
+      'UPDATE games SET rating=$1, aggregated_rating=$2, updated_at=NOW() WHERE id=$3 AND user_id=$4',
+      [rating, aggregated_rating, id, userId]
+    );
+    res.json({ rating, aggregated_rating });
+  } catch (err) {
+    console.error('Fetch ratings error:', err);
+    res.status(500).json({ message: 'Failed to fetch ratings from IGDB.' });
+  }
+});
+
 app.put('/api/games/:id', isAuthenticated, async (req, res) => {
   const { id } = req.params;
-  const { title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases } = req.body;
+  const { title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, rating, aggregated_rating } = req.body;
   const userId = req.user.id;
   if (!title) return res.status(400).json({ message: 'Title is required.' });
   try {
     const result = await query(
       `UPDATE games SET title=$1, cover_url=$2, summary=$3, genres=$4, series=$5, developer=$6,
-       publisher=$7, time_to_beat=$8, releases=$9, updated_at=NOW()
-       WHERE id=$10 AND user_id=$11 RETURNING *`,
+       publisher=$7, time_to_beat=$8, releases=$9, rating=$10, aggregated_rating=$11, updated_at=NOW()
+       WHERE id=$12 AND user_id=$13 RETURNING *`,
       [title, cover_url || null, summary || null, genres || [], series || null, developer || null,
-       publisher || null, time_to_beat || null, releases ? JSON.stringify(releases) : null, id, userId]
+       publisher || null, time_to_beat || null, releases ? JSON.stringify(releases) : null,
+       rating != null ? rating : null, aggregated_rating != null ? aggregated_rating : null,
+       id, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
@@ -621,6 +680,22 @@ app.patch('/api/games/:id/tag', isAuthenticated, async (req, res) => {
     const result = await query(
       'UPDATE games SET tag=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING id, tag',
       [tag, id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+app.patch('/api/games/:id/remarks', isAuthenticated, async (req, res) => {
+  const { id } = req.params;
+  const { remarks, wishlist_remarks } = req.body;
+  const userId = req.user.id;
+  try {
+    const result = await query(
+      'UPDATE games SET remarks=$1, wishlist_remarks=$2, updated_at=NOW() WHERE id=$3 AND user_id=$4 RETURNING id, remarks, wishlist_remarks',
+      [remarks ?? null, wishlist_remarks ?? null, id, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
@@ -1539,6 +1614,10 @@ app.get('/api/bulletin/:id/content', async (req, res) => {
 async function runMigrations() {
   await query(`ALTER TABLE game_attachments ADD COLUMN IF NOT EXISTS file_size BIGINT NOT NULL DEFAULT 0`);
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS storage_quota BIGINT NOT NULL DEFAULT 5368709120`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS rating NUMERIC(5,2)`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS aggregated_rating NUMERIC(5,2)`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS remarks TEXT`);
+  await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS wishlist_remarks TEXT`);
 }
 
 runMigrations()

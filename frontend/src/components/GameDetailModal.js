@@ -22,6 +22,34 @@ const info = (color = 'var(--color-text-muted)') => ({
   margin: 0, fontSize: '0.75rem', lineHeight: '1.4', color,
 });
 
+const ratingColor = (score) => {
+  if (score >= 75) return '#3a7d44';
+  if (score >= 50) return '#b07d10';
+  return '#a03030';
+};
+
+function RatingBadge({ score, label }) {
+  const bg = ratingColor(score);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+      <div style={{
+        width: '40px', height: '40px', borderRadius: '8px', background: bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 800, fontSize: '0.95rem', color: 'white', letterSpacing: '-0.5px',
+        boxShadow: `0 2px 6px ${bg}55`,
+      }}>
+        {score}
+      </div>
+      <span style={{
+        fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+        letterSpacing: '0.07em', color: 'var(--color-text-muted)',
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 const inputStyle = {
   fontSize: '0.75rem', padding: '2px 6px',
   background: 'var(--color-bg-page)', border: '1px solid var(--color-border)',
@@ -584,17 +612,19 @@ function SyncPanel({ game, onSynced, onCancel }) {
     setSyncing(true);
     try {
       await api.games.update(game.id, {
-        title:        selected.title,
-        cover_url:    selected.cover_url,
-        summary:      selected.summary,
-        genres:       selected.genres,
-        series:       selected.series,
-        developer:    selected.developer,
-        publisher:    selected.publisher,
-        time_to_beat: selected.time_to_beat,
-        releases:     selected.releases,
-        tag:          game.tag,
-        igdb_id:      selected.igdb_id,
+        title:             selected.title,
+        cover_url:         selected.cover_url,
+        summary:           selected.summary,
+        genres:            selected.genres,
+        series:            selected.series,
+        developer:         selected.developer,
+        publisher:         selected.publisher,
+        time_to_beat:      selected.time_to_beat,
+        releases:          selected.releases,
+        tag:               game.tag,
+        igdb_id:           selected.igdb_id,
+        rating:            selected.rating,
+        aggregated_rating: selected.aggregated_rating,
       });
       toast({
         title: 'Sync complete',
@@ -874,6 +904,11 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const [localTitle,      setLocalTitle]      = useState(game?.title || '');
   const [platforms,       setPlatforms]       = useState(DEFAULT_PLATFORMS);
   const [hasIgdbCredentials, setHasIgdbCredentials] = useState(false);
+  const [localRating,           setLocalRating]           = useState(game?.rating             ?? null);
+  const [localAggregatedRating, setLocalAggregatedRating] = useState(game?.aggregated_rating  ?? null);
+  const [remarksDraft,          setRemarksDraft]          = useState(game?.remarks             || '');
+  const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState(game?.wishlist_remarks    || '');
+  const [savingRemarks,         setSavingRemarks]         = useState(false);
 
   useEffect(() => {
     if (game) {
@@ -888,13 +923,27 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       setEditingTitle(false);
       setTitleDraft('');
       setLocalTitle(game.title || '');
+      setLocalRating(game.rating ?? null);
+      setLocalAggregatedRating(game.aggregated_rating ?? null);
+      setRemarksDraft(game.remarks || '');
+      setWishlistRemarksDraft(game.wishlist_remarks || '');
     }
   }, [game]);
 
   useEffect(() => {
     if (!isOpen) return;
     api.igdb.getCredentials().then((creds) => {
-      setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
+      const hasCreds = !!creds.igdb_client_id && !!creds.igdb_client_secret;
+      setHasIgdbCredentials(hasCreds);
+      if (hasCreds && game?.igdb_id && game?.rating == null && game?.aggregated_rating == null) {
+        api.games.fetchRatings(game.id)
+          .then(({ rating, aggregated_rating }) => {
+            setLocalRating(rating);
+            setLocalAggregatedRating(aggregated_rating);
+            onUpdated?.();
+          })
+          .catch(() => {});
+      }
     }).catch(() => setHasIgdbCredentials(false));
     getApiBase().then(setApiBase).catch(() => {});
   }, [isOpen]);
@@ -974,6 +1023,22 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
       toast({ title: 'Failed to update title', description: err.message, status: 'error', duration: 3000 });
     } finally {
       setSavingTitle(false);
+    }
+  };
+
+  const handleRemarksSave = async () => {
+    setSavingRemarks(true);
+    try {
+      await api.games.updateRemarks(game.id, {
+        remarks:          remarksDraft          || null,
+        wishlist_remarks: wishlistRemarksDraft  || null,
+      });
+      toast({ title: 'Remarks saved', status: 'success', duration: 2000 });
+      onUpdated?.();
+    } catch (err) {
+      toast({ title: 'Failed to save remarks', description: err.message, status: 'error', duration: 3000 });
+    } finally {
+      setSavingRemarks(false);
     }
   };
 
@@ -1150,6 +1215,16 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                 {devPub           && <span style={info()}>{devPub}</span>}
                 {game.genres?.length > 0 && <span style={info()}>{game.genres.join(', ')}</span>}
                 {game.series      && <span style={info()}>Series: {game.series}</span>}
+                {(localAggregatedRating != null || localRating != null) && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    {localAggregatedRating != null && (
+                      <RatingBadge score={localAggregatedRating} label="Critics" />
+                    )}
+                    {localRating != null && (
+                      <RatingBadge score={localRating} label="Users" />
+                    )}
+                  </div>
+                )}
 
                 {/* Synopsis — fills remaining height */}
                 {game.summary && (
@@ -1239,6 +1314,62 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                   onDeleted={(ptId) => { setPlaythroughs((prev) => prev.filter((p) => p.id !== ptId)); onUpdated?.(); }}
                 />
               ))}
+            </Box>
+
+            {/* ── Remarks ───────────────────────────────────────────────── */}
+            <Divider borderColor="var(--color-border-subtle)" />
+            <Box>
+              <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mb={2}>
+                Remarks
+              </Text>
+              <textarea
+                value={remarksDraft}
+                onChange={(e) => setRemarksDraft(e.target.value)}
+                placeholder="Add your notes or thoughts about this game…"
+                rows={3}
+                style={{
+                  width: '100%', resize: 'vertical', padding: '8px 10px',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                  background: 'var(--color-bg-page)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  color: 'var(--color-text-primary)',
+                  outline: 'none',
+                }}
+              />
+              {listStatus === 'wishlist' && (
+                <>
+                  <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mt={3} mb={2}>
+                    Wishlist Remarks
+                  </Text>
+                  <textarea
+                    value={wishlistRemarksDraft}
+                    onChange={(e) => setWishlistRemarksDraft(e.target.value)}
+                    placeholder="On which platform you want to play this game? Does the JP version supports English?"
+                    rows={3}
+                    style={{
+                      width: '100%', resize: 'vertical', padding: '8px 10px',
+                      fontSize: '0.8rem', lineHeight: 1.6,
+                      background: 'var(--color-bg-page)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '6px',
+                      color: 'var(--color-text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                </>
+              )}
+              <HStack justify="flex-end" mt={2}>
+                <Button
+                  size="xs"
+                  bg="var(--color-accent)" color="white"
+                  _hover={{ opacity: 0.85 }}
+                  isLoading={savingRemarks}
+                  onClick={handleRemarksSave}
+                >
+                  Save
+                </Button>
+              </HStack>
             </Box>
 
             {/* ── Attachments ───────────────────────────────────────────── */}

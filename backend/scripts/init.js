@@ -73,9 +73,13 @@ const createTables = async () => {
       series       TEXT,
       developer    TEXT,
       publisher    TEXT,
-      time_to_beat INTEGER,
-      releases     JSONB,
-      tag          game_tag,
+      time_to_beat       INTEGER,
+      releases           JSONB,
+      tag                game_tag,
+      rating             NUMERIC(5,2),
+      aggregated_rating  NUMERIC(5,2),
+      remarks            TEXT,
+      wishlist_remarks   TEXT,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );

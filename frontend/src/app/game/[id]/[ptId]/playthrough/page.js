@@ -17,6 +17,7 @@ import { api } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
 import { ptDisplayLabel } from '@/utils/playthroughs';
+import { FavoriteIcon } from '@/constants/tags';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -388,21 +389,47 @@ function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
 }
 
 // ── Game info card ────────────────────────────────────────────────────────────
-function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clearFocus, playthroughs }) {
-  const [summaryExpanded, setSummaryExpanded] = useState(false);
-  if (!game) return null;
-  const summary = game.summary || '';
-  const longSummary = summary.length > 280;
-  const displaySummary = longSummary && !summaryExpanded ? summary.slice(0, 280) + '…' : summary;
+const ratingColor = (score) => {
+  if (score >= 75) return '#3a7d44';
+  if (score >= 50) return '#b07d10';
+  return '#a03030';
+};
 
-  const metaItems = [
-    game.genres?.length    && { label: 'Genres',    value: game.genres.join(', ') },
-    game.developer         && { label: 'Developer', value: game.developer },
-    game.publisher         && { label: 'Publisher', value: game.publisher },
-    game.series?.length    && { label: 'Series',    value: game.series.join(', ') },
-    game.time_to_beat      && { label: 'Time to beat', value: `~${game.time_to_beat}h` },
+function RatingBadge({ score, label }) {
+  const bg = ratingColor(score);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+      <div style={{
+        width: '38px', height: '38px', borderRadius: '8px', background: bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 800, fontSize: '0.9rem', color: 'white', letterSpacing: '-0.5px',
+        boxShadow: `0 2px 6px ${bg}55`,
+      }}>
+        {score}
+      </div>
+      <span style={{
+        fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase',
+        letterSpacing: '0.07em', color: 'var(--color-text-muted)',
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clearFocus, playthroughs, onTagUpdate }) {
+  const [synopsisOpen, setSynopsisOpen] = useState(false);
+  if (!game) return null;
+
+  const leftMeta = [
+    game.genres?.length && { label: 'Genres',     value: game.genres.join(', ') },
+    game.developer      && { label: 'Developer',  value: game.developer },
+    game.publisher      && { label: 'Publisher',  value: game.publisher },
+    game.series         && { label: 'Series',     value: Array.isArray(game.series) ? game.series.join(', ') : game.series },
   ].filter(Boolean);
 
+  const hasRatings  = game.aggregated_rating != null || game.rating != null;
+  const hasRightCol = hasRatings || game.time_to_beat;
   const focused = isFocused(game.id);
   const hasPts  = playthroughs.length > 0;
 
@@ -415,77 +442,128 @@ function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clear
     await setFocus({ gameId: String(game.id), ptId: String(pt.id), gameTitle: game.title, coverUrl: game.cover_url ?? null });
   };
 
+  const metaLabel = {
+    fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '0.06em', color: 'var(--color-text-muted)',
+  };
+  const metaValue = { fontSize: '0.78rem', color: 'var(--color-text-secondary)' };
+
   return (
     <Box mb={5} p={4} borderWidth="1px" borderColor="var(--color-border-subtle)" borderRadius="md"
       bg="var(--color-bg-subtle)">
-      <HStack spacing={4} align="flex-start">
+
+      {/* ── Top row: cover + two-column details ── */}
+      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+
         {/* Cover */}
         {game.cover_url && (
-          <Box flexShrink={0} borderRadius="md" overflow="hidden" w="80px" h="107px">
+          <Box flexShrink={0} borderRadius="md" overflow="hidden" w="105px" h="140px"
+            boxShadow="0 2px 8px rgba(0,0,0,0.25)">
             <img src={game.cover_url} alt={game.title}
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           </Box>
         )}
 
-        {/* Info */}
+        {/* Details */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Title + focus toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', lineHeight: 1 }}>
-            <button onClick={onOpenModal} style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-            }}>
-              <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1 }}>
+
+          {/* Title + action buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+            <button onClick={onOpenModal} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1 }}>
                 {game.title}
               </span>
             </button>
+            <Tooltip label={game.tag === 'favorite' ? 'Remove from Favorites' : 'Mark as Favorite'} hasArrow placement="top" openDelay={200}>
+              <button onClick={() => onTagUpdate?.(game.tag === 'favorite' ? null : 'favorite')} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '30px', height: '30px', borderRadius: '7px', border: 'none',
+                background: game.tag === 'favorite' ? '#e05c5c22' : 'transparent',
+                color: game.tag === 'favorite' ? '#e05c5c' : 'var(--color-text-muted)',
+                cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+              }}>
+                <FavoriteIcon size={15} />
+              </button>
+            </Tooltip>
             <Tooltip label={focused ? 'Remove from Focus' : hasPts ? 'Set In Focus' : 'Add a playthrough first'} hasArrow placement="top" openDelay={200}>
               <button onClick={handleFocusToggle} disabled={!hasPts && !focused} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '22px', height: '22px', borderRadius: '5px', border: 'none',
+                width: '30px', height: '30px', borderRadius: '7px', border: 'none',
                 background: focused ? 'var(--color-accent-subtle)' : 'transparent',
                 color: focused ? 'var(--color-accent)' : 'var(--color-text-muted)',
                 cursor: (!hasPts && !focused) ? 'default' : 'pointer',
                 opacity: (!hasPts && !focused) ? 0.4 : 1,
                 flexShrink: 0, transition: 'all 0.15s',
               }}>
-                <FiTarget size={12} />
+                <FiTarget size={15} />
               </button>
             </Tooltip>
           </div>
 
-          {/* Meta grid */}
-          {metaItems.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
-              {metaItems.map(({ label, value }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: '6px', lineHeight: 1.5 }}>
-                  <span style={{
-                    fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                    color: 'var(--color-text-muted)', minWidth: '72px', flexShrink: 0,
-                  }}>{label}</span>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Two-column meta */}
+          <div style={{ display: 'flex', gap: '16px' }}>
 
-          {/* Summary */}
-          {summary && (
-            <div>
-              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                {displaySummary}
-              </span>
-              {longSummary && (
-                <button onClick={() => setSummaryExpanded(v => !v)} style={{
-                  display: 'block', fontSize: '0.72rem', color: 'var(--color-accent)',
-                  background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', marginTop: '2px',
-                }}>
-                  {summaryExpanded ? 'Show less' : 'Show more'}
-                </button>
-              )}
-            </div>
+            {/* Left col: genres / dev / pub / series */}
+            {leftMeta.length > 0 && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {leftMeta.map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'baseline', gap: '5px', lineHeight: 1.65 }}>
+                    <span style={{ ...metaLabel, minWidth: '62px', flexShrink: 0 }}>{label}</span>
+                    <span style={metaValue}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Right col: ratings + time to beat */}
+            {hasRightCol && (
+              <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+                {hasRatings && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {game.aggregated_rating != null && <RatingBadge score={game.aggregated_rating} label="Critics" />}
+                    {game.rating != null            && <RatingBadge score={game.rating}            label="Users"   />}
+                  </div>
+                )}
+                {game.time_to_beat && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                      ~{game.time_to_beat}h
+                    </span>
+                    <span style={{ ...metaLabel }}>To beat</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Synopsis (collapsible) ── */}
+      {game.summary && (
+        <div style={{ marginTop: '10px', borderTop: '1px solid var(--color-border-subtle)', paddingTop: '8px' }}>
+          <button onClick={() => setSynopsisOpen(v => !v)} style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.06em', color: 'var(--color-text-muted)',
+          }}>
+            <ChevronRightIcon
+              boxSize={3}
+              style={{ transform: synopsisOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+            />
+            Synopsis
+          </button>
+          {synopsisOpen && (
+            <p style={{
+              margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--color-text-secondary)',
+              lineHeight: 1.65,
+            }}>
+              {game.summary}
+            </p>
           )}
         </div>
-      </HStack>
+      )}
+
     </Box>
   );
 }
@@ -499,11 +577,14 @@ export default function PlaythroughPage({ params }) {
   const { isFocused, focusGame, setFocus, clearFocus } = useFocus();
   const { visitNotes } = useLastVisited();
 
-  const [game,          setGame]          = useState(null);
-  const [playthroughs,  setPlaythroughs]  = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [recentOpen,    setRecentOpen]    = useState(false);
-  const [gameModalOpen, setGameModalOpen] = useState(false);
+  const [game,                  setGame]                  = useState(null);
+  const [playthroughs,          setPlaythroughs]          = useState([]);
+  const [loading,               setLoading]               = useState(true);
+  const [recentOpen,            setRecentOpen]            = useState(false);
+  const [gameModalOpen,         setGameModalOpen]         = useState(false);
+  const [remarksDraft,          setRemarksDraft]          = useState('');
+  const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState('');
+  const [savingRemarks,         setSavingRemarks]         = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -512,6 +593,8 @@ export default function PlaythroughPage({ params }) {
         const g = await api.games.get(id);
         setGame(g);
         setPlaythroughs(g.playthroughs || []);
+        setRemarksDraft(g.remarks || '');
+        setWishlistRemarksDraft(g.wishlist_remarks || '');
       } catch (err) {
         toast({ title: 'Failed to load', description: err.message, status: 'error', duration: 4000 });
       } finally {
@@ -565,6 +648,12 @@ export default function PlaythroughPage({ params }) {
               setFocus={setFocus}
               clearFocus={clearFocus}
               playthroughs={playthroughs}
+              onTagUpdate={async (tag) => {
+                await api.games.updateTag(game.id, tag);
+                const g = await api.games.get(id);
+                setGame(g);
+                setPlaythroughs(g.playthroughs || []);
+              }}
             />
 
             {/* Section header */}
@@ -590,6 +679,79 @@ export default function PlaythroughPage({ params }) {
                 />
               ))
             )}
+
+            {/* Remarks */}
+            <Box mt={4}>
+              <Text fontSize="0.72rem" fontWeight={700} textTransform="uppercase" letterSpacing="0.08em"
+                mb={2} style={{ color: 'var(--color-text-muted)' }}>
+                Remarks
+              </Text>
+              <textarea
+                value={remarksDraft}
+                onChange={(e) => setRemarksDraft(e.target.value)}
+                placeholder="Add your notes or thoughts about this game…"
+                rows={3}
+                style={{
+                  width: '100%', resize: 'vertical', padding: '8px 10px',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                  background: 'var(--color-bg-subtle)',
+                  border: '1px solid var(--color-border-subtle)',
+                  borderRadius: '6px',
+                  color: 'var(--color-text-primary)',
+                  outline: 'none',
+                }}
+              />
+              {game.tag === 'wishlist' && (
+                <>
+                  <Text fontSize="0.72rem" fontWeight={700} textTransform="uppercase" letterSpacing="0.08em"
+                    mt={3} mb={2} style={{ color: 'var(--color-text-muted)' }}>
+                    Wishlist Remarks
+                  </Text>
+                  <textarea
+                    value={wishlistRemarksDraft}
+                    onChange={(e) => setWishlistRemarksDraft(e.target.value)}
+                    placeholder="On which platform you want to play this game? Does the JP version supports English?"
+                    rows={3}
+                    style={{
+                      width: '100%', resize: 'vertical', padding: '8px 10px',
+                      fontSize: '0.8rem', lineHeight: 1.6,
+                      background: 'var(--color-bg-subtle)',
+                      border: '1px solid var(--color-border-subtle)',
+                      borderRadius: '6px',
+                      color: 'var(--color-text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                </>
+              )}
+              <HStack justify="flex-end" mt={2}>
+                <Button
+                  size="xs"
+                  bg="var(--color-accent)" color="white"
+                  _hover={{ opacity: 0.85 }}
+                  isLoading={savingRemarks}
+                  onClick={async () => {
+                    setSavingRemarks(true);
+                    try {
+                      await api.games.updateRemarks(game.id, {
+                        remarks:          remarksDraft         || null,
+                        wishlist_remarks: wishlistRemarksDraft || null,
+                      });
+                      const g = await api.games.get(id);
+                      setGame(g);
+                      setPlaythroughs(g.playthroughs || []);
+                      toast({ title: 'Remarks saved', status: 'success', duration: 2000 });
+                    } catch (err) {
+                      toast({ title: 'Failed to save remarks', description: err.message, status: 'error', duration: 3000 });
+                    } finally {
+                      setSavingRemarks(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </HStack>
+            </Box>
           </>
         )}
       </div>
@@ -599,7 +761,7 @@ export default function PlaythroughPage({ params }) {
           game={game}
           isOpen={gameModalOpen}
           onClose={() => setGameModalOpen(false)}
-          onUpdated={() => api.games.get(id).then(g => { setGame(g); setPlaythroughs(g.playthroughs || []); }).catch(() => {})}
+          onUpdated={() => api.games.get(id).then(g => { setGame(g); setPlaythroughs(g.playthroughs || []); setRemarksDraft(g.remarks || ''); setWishlistRemarksDraft(g.wishlist_remarks || ''); }).catch(() => {})}
           onDeleted={() => router.push('/')}
         />
       )}
