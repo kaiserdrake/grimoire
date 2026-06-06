@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FiBook, FiTrash2, FiLink } from 'react-icons/fi';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useAuth } from '@/context/AuthContext';
+import { useFocus } from '@/context/FocusContext';
 import { api } from '@/utils/api';
 import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
 import { RecentGameRow } from './RecentDrawer';
@@ -27,6 +28,7 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
   const router = useRouter();
   const { recentGames } = useLastVisited();
   const { user } = useAuth();
+  const { focusGame } = useFocus();
   const [bulletinPosts, setBulletinPosts] = useState([]);
   const [readPost, setReadPost] = useState(null);
   const [readLoading, setReadLoading] = useState(false);
@@ -119,13 +121,12 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
               recentGames.length === 0 ? (
                 <span className="recent-drawer-empty">Open a game's Notes or Map to see it here.</span>
               ) : (
-                recentGames.map((entry, idx) => (
+                recentGames.map((entry) => (
                   <RecentGameRow
                     key={entry.gameId}
                     entry={entry}
-                    isCurrent={idx === 0}
-                    onNotes={() => navigate(`/game/${entry.gameId}/${entry.ptId}/notes`)}
-                    onMap={()   => navigate(`/game/${entry.gameId}/${entry.ptId}/map`)}
+                    isInFocus={focusGame != null && String(focusGame.gameId) === String(entry.gameId)}
+                    onClick={() => navigate(`/game/${entry.gameId}/${entry.ptId}/playthrough`)}
                   />
                 ))
               )

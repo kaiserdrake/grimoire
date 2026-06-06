@@ -7,10 +7,11 @@ import {
   Box, Divider, useToast, IconButton, Tooltip, Spinner,
 } from '@chakra-ui/react';
 import { DeleteIcon, AddIcon, ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiFileText, FiMap, FiTrash2, FiEdit2, FiRefreshCw, FiPaperclip } from 'react-icons/fi';
+import { FiFileText, FiMap, FiTrash2, FiEdit2, FiRefreshCw, FiPaperclip, FiTarget } from 'react-icons/fi';
 
 import { useRouter } from 'next/navigation';
 import { api, getApiBase } from '@/utils/api';
+import { useFocus } from '@/context/FocusContext';
 
 import { DEFAULT_PLATFORMS } from '@/constants/platforms';
 import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
@@ -852,6 +853,9 @@ function AddPlaythroughForm({ gameId, platforms, onAdded, onCancel }) {
 export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDeleted }) {
   const toast  = useToast();
   const router = useRouter();
+  const { isFocused, setFocus, clearFocus } = useFocus();
+  const focusBtnRef  = useRef(null);
+  const addPtBtnRef  = useRef(null);
 
 
   const [listStatus,      setListStatus]      = useState(game?.tag ?? null);
@@ -889,10 +893,25 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
 
   useEffect(() => {
     if (!isOpen) return;
-      api.igdb.getCredentials().then((creds) => {
-        setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
-      }).catch(() => setHasIgdbCredentials(false));
+    api.igdb.getCredentials().then((creds) => {
+      setHasIgdbCredentials(!!creds.igdb_client_id && !!creds.igdb_client_secret);
+    }).catch(() => setHasIgdbCredentials(false));
     getApiBase().then(setApiBase).catch(() => {});
+  }, [isOpen]);
+
+  // Focus the relevant header button after the modal animation settles
+  useEffect(() => {
+    if (!isOpen) return;
+    const t = setTimeout(() => {
+      const hasNoPlaythroughs = !playthroughs || playthroughs.length === 0;
+      const focused = game && isFocused(game.id);
+      if (hasNoPlaythroughs && !focused) {
+        addPtBtnRef.current?.focus();
+      } else {
+        focusBtnRef.current?.focus();
+      }
+    }, 150);
+    return () => clearTimeout(t);
   }, [isOpen]);
 
   // Load user's configured platform list
@@ -1049,7 +1068,7 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
             </HStack>
           )}
           {!editingTitle && (
-            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '4px', flexShrink: 0, alignItems: 'center' }}>
               {Object.entries(TAG_CONFIG).filter(([key]) => key !== 'playing').map(([key, cfg]) => (
                 <Tooltip key={key} label={listStatus === key ? `Remove ${cfg.label}` : cfg.label} hasArrow placement="bottom" openDelay={300}>
                   <button
@@ -1067,6 +1086,41 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
                   </button>
                 </Tooltip>
               ))}
+              {/* In Focus toggle */}
+              {(() => {
+                const focused = isFocused(game.id);
+                const hasPts  = playthroughs.length > 0;
+                const label   = focused ? 'Remove from Focus' : hasPts ? 'Set In Focus' : 'Add a playthrough to set In Focus';
+                const handleFocusClick = async () => {
+                  if (focused) { await clearFocus(); return; }
+                  if (!hasPts) return;
+                  const pt = playthroughs.find(p => p.status === 'playing')
+                    ?? playthroughs.find(p => p.status === 'pend')
+                    ?? playthroughs[0];
+                  await setFocus({ gameId: String(game.id), ptId: String(pt.id), gameTitle: localTitle, coverUrl: game.cover_url ?? null });
+                };
+                return (
+                  <Tooltip label={label} hasArrow placement="bottom" openDelay={0}>
+                    <button
+                      ref={focusBtnRef}
+                      onClick={handleFocusClick}
+                      disabled={!hasPts && !focused}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '28px', height: '28px', borderRadius: '6px',
+                        border: `1px solid ${focused ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        background: focused ? 'var(--color-accent-subtle)' : 'transparent',
+                        color: focused ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                        cursor: (!hasPts && !focused) ? 'default' : 'pointer',
+                        opacity: (!hasPts && !focused) ? 0.4 : 1,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <FiTarget size={13} />
+                    </button>
+                  </Tooltip>
+                );
+              })()}
             </div>
           )}
           </div>
@@ -1151,12 +1205,14 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
             <Box>
               <HStack justify="space-between" mb={2}>
                 <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)">Playthroughs</Text>
-                <Button size="xs" leftIcon={<AddIcon />} variant="ghost" color="var(--color-text-muted)"
-                  bg="transparent" border="none" boxShadow="none"
-                  _hover={{ color: 'var(--color-text-primary)', bg: 'transparent' }}
-                  onClick={() => setShowAddPT((v) => !v)}>
-                  Add
-                </Button>
+                <Tooltip label="Add playthrough" hasArrow placement="top" openDelay={0}>
+                  <Button ref={addPtBtnRef} size="xs" leftIcon={<AddIcon />} variant="ghost" color="var(--color-text-muted)"
+                    bg="transparent" border="none" boxShadow="none"
+                    _hover={{ color: 'var(--color-text-primary)', bg: 'transparent' }}
+                    onClick={() => setShowAddPT((v) => !v)}>
+                    Add
+                  </Button>
+                </Tooltip>
               </HStack>
 
               {showAddPT && (

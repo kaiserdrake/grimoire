@@ -153,9 +153,10 @@ function todayPosition(rangeStart, rangeEnd) {
 }
 
 // ── Gantt Chart ───────────────────────────────────────────────────────────────
-const ROW_HEIGHT  = 40;
-const LABEL_WIDTH = 160;
-const MIN_BAR_W   = 6;
+const ROW_HEIGHT   = 40;
+const LABEL_WIDTH  = 160;
+const MIN_BAR_W    = 6;
+const CHART_BASE_PX = 900; // inner content width at zoom = 1
 
 // Hides the horizontal scrollbar on the gantt body (Firefox uses scrollbarWidth:'none' inline)
 const GANTT_BODY_STYLE = (
@@ -166,18 +167,67 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
   const today = new Date();
   const rows  = buildGanttRows(sessions, rangeStart, rangeEnd, sortKey, sortDir);
   const { monthTicks, yearTicks, multiYear } = buildTicks(rangeStart, rangeEnd);
-  const todayPct  = todayPosition(rangeStart, rangeEnd);
+  const todayPct = todayPosition(rangeStart, rangeEnd);
 
-  // Shared horizontal scroll sync between header and body
-  const headerRef = useRef(null);
-  const bodyRef   = useRef(null);
+  const headerRef  = useRef(null);
+  const bodyRef    = useRef(null);
+  const outerRef   = useRef(null);
+  const zoomRef    = useRef(1);
+  const [zoom, setZoomState] = useState(1);
 
+  const setZoom = useCallback((next) => {
+    zoomRef.current = next;
+    setZoomState(next);
+  }, []);
+
+  const innerWidth = Math.max(600, zoom * CHART_BASE_PX);
+
+  // Sync horizontal scroll between header and body
   const onHeaderScroll = () => {
     if (bodyRef.current) bodyRef.current.scrollLeft = headerRef.current.scrollLeft;
   };
   const onBodyScroll = () => {
     if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
   };
+
+  // Cursor-aware zoom: the point under the cursor stays fixed
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const factor   = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const prevZoom = zoomRef.current;
+    const nextZoom = Math.max(0.3, Math.min(10, prevZoom * factor));
+
+    if (bodyRef.current) {
+      const rect         = bodyRef.current.getBoundingClientRect();
+      const scrollLeft   = bodyRef.current.scrollLeft;
+      // Cursor offset from the left edge of the bar area (excluding sticky label)
+      const barCursorX   = (e.clientX - rect.left) - LABEL_WIDTH;
+      // Absolute position in bar-area content space
+      const barContentX  = barCursorX + scrollLeft;
+      // Scale to new zoom
+      const scale        = nextZoom / prevZoom;
+      const newScrollLeft = barContentX * scale - barCursorX;
+
+      setZoom(nextZoom);
+
+      requestAnimationFrame(() => {
+        if (bodyRef.current) {
+          bodyRef.current.scrollLeft   = Math.max(0, newScrollLeft);
+          if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
+        }
+      });
+    } else {
+      setZoom(nextZoom);
+    }
+  }, [setZoom]);
+
+  // Attach wheel listener (non-passive so we can preventDefault)
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   if (rows.length === 0) {
     return (
@@ -191,27 +241,35 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
   const headerHeight = multiYear ? 36 : 18;
 
   return (
-    <Box border="1px solid var(--color-border-subtle)" borderRadius="6px" overflow="hidden">
+    <Box ref={outerRef} border="1px solid var(--color-border-subtle)" borderRadius="6px" overflow="hidden">
       {GANTT_BODY_STYLE}
 
-      {/* ── Sticky header: game label column + tick area, scrolls horizontally ── */}
+      {/* ── Zoom indicator ── */}
+      {zoom !== 1 && (
+        <div style={{
+          position: 'absolute', right: '12px', marginTop: '4px',
+          fontSize: '0.65rem', color: 'var(--color-text-muted)',
+          pointerEvents: 'none', zIndex: 20, userSelect: 'none',
+        }}>
+          {Math.round(zoom * 100)}%
+        </div>
+      )}
+
+      {/* ── Header: label spacer + tick area ── */}
       <div
         ref={headerRef}
         onScroll={onHeaderScroll}
         style={{
           overflowX: 'auto',
           overflowY: 'hidden',
-          // Show scrollbar here (between header and body)
           scrollbarWidth: 'thin',
           scrollbarColor: 'var(--color-border) transparent',
           borderBottom: '1px solid var(--color-border-subtle)',
           background: 'var(--color-bg-subtle)',
         }}
       >
-        <div style={{ display: 'flex', minWidth: '600px', padding: '6px 0 4px' }}>
-          {/* Frozen left label column spacer */}
+        <div style={{ display: 'flex', width: `${innerWidth}px`, padding: '6px 0 4px' }}>
           <div style={{ width: `${LABEL_WIDTH}px`, flexShrink: 0 }} />
-          {/* Tick area */}
           <div style={{ flex: 1, position: 'relative', height: `${headerHeight}px` }}>
             {multiYear && yearTicks.map((t, i) => (
               <span key={i} style={{
@@ -232,7 +290,7 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
         </div>
       </div>
 
-      {/* ── Scrollable body: vertical scroll here, horizontal synced with header ── */}
+      {/* ── Body: rows + bars ── */}
       <div
         ref={bodyRef}
         onScroll={onBodyScroll}
@@ -241,11 +299,10 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
           overflowX: 'auto',
           overflowY: 'auto',
           maxHeight: '480px',
-          // Hide horizontal scrollbar here — header scrollbar is the one shown
           scrollbarWidth: 'none',
         }}
       >
-        <div style={{ minWidth: '600px' }}>
+        <div style={{ width: `${innerWidth}px` }}>
           {rows.map((row) => (
             <div key={row.game_id} style={{
               display: 'flex', alignItems: 'center',
@@ -1013,6 +1070,7 @@ export default function CalendarPage() {
               </HStack>
 
               <GanttChart
+                key={preset}
                 sessions={sessions}
                 rangeStart={range.start}
                 rangeEnd={range.end}

@@ -246,12 +246,57 @@ body {
 
 /* ── Notes IDE layout ───────────────────────────────────────────────────────── */
 
+/* ── Game tab bar (Notes / Maps / Playthrough) ─────────────────────────────── */
+.game-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px;
+  height: 38px;
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.game-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.02em;
+}
+
+.game-tab-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.game-tab-btn.active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.game-tab-btn.disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
 .notes-workspace {
   display: grid;
   grid-template-columns: 200px 1fr;
-  height: calc(100vh - 56px);
+  height: calc(100vh - 56px - 38px);
   overflow: hidden;
-  border-top: 1px solid var(--color-border);
+  border-top: none;
 }
 
 /* ── Left sidebar ── */
@@ -1212,11 +1257,11 @@ body {
 
 .recent-drawer {
   position: fixed;
-  bottom: 0;
+  top: 20%;
   right: 0;
   display: flex;
   flex-direction: row;
-  align-items: flex-end;
+  align-items: flex-start;
   pointer-events: none;
   z-index: 50;
 }
@@ -1229,7 +1274,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--color-bg-surface);
-  border-top: none;
+  border-bottom: none;
   border-left: none;
   transition: width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
   pointer-events: auto;
@@ -1237,9 +1282,9 @@ body {
 .recent-drawer--open .recent-drawer-inner {
   width: 300px;
   height: 320px;
-  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border-subtle);
   border-left: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md) 0 0 0;
+  border-radius: 0 0 0 var(--radius-md);
 }
 
 /* The pull tab */
@@ -1267,7 +1312,7 @@ body {
   padding: 0;
   user-select: none;
   flex-shrink: 0;
-  margin-bottom: 24px; /* lift off the very bottom */
+  margin-top: 0;
 }
 .recent-drawer-pull:hover {
   background: var(--color-bg-hover);
@@ -1327,15 +1372,20 @@ body {
 }
 .recent-drawer-game-row:last-child { border-bottom: none; }
 
+.recent-drawer-game-row--clickable {
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.recent-drawer-game-row--clickable:hover { filter: brightness(1.12); }
+
 .recent-drawer-game-content {
   position: relative;
   z-index: 1;
   height: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 7px;
   padding: 0 10px;
-  gap: 8px;
 }
 
 .recent-drawer-game-title {
@@ -1346,12 +1396,6 @@ body {
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
-}
-
-.recent-drawer-game-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
 }
 
 .recent-drawer-action-btn {

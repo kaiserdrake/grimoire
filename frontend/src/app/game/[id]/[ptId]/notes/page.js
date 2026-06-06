@@ -17,6 +17,8 @@ import rehypeRaw from 'rehype-raw';
 import Navbar from '@/components/Navbar';
 import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
+import RecentDrawer from '@/components/RecentDrawer';
+import GameTabBar from '@/components/GameTabBar';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
@@ -474,18 +476,6 @@ function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
           );
         })}
       </div>
-      {/* Footer — navigate to Maps */}
-      <div className="notes-sidebar-footer">
-        <button
-          className="notes-sidebar-footer-btn"
-          onClick={() => activePtId && gameId && router.push(`/game/${gameId}/${activePtId}/map`)}
-          disabled={!activePtId || !gameId}
-          title="Go to Maps for this playthrough"
-        >
-          <FiMap size={11} style={{ flexShrink: 0 }} />
-          TO MAPS
-        </button>
-      </div>
     </div>
   );
 }
@@ -574,6 +564,7 @@ export default function NotesPage({ params }) {
   const [drawerTab,  setDrawerTab]          = useState('recent');
   const [publishing, setPublishing]         = useState(false);
   const [previewZoom, setPreviewZoom]       = useState(100);
+  const [recentOpen, setRecentOpen]         = useState(false);
 
   // ── All persisted via TabStateContext (survives tab switches) ─────────────
   const activePtId   = notesState.activePtId;
@@ -774,6 +765,7 @@ export default function NotesPage({ params }) {
   return (
     <>
       <Navbar />
+      <GameTabBar gameId={id} ptId={activePtId || initialPtId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <div className="notes-workspace">
 
         {/* ── Left: Sidebar ── */}
@@ -972,6 +964,7 @@ export default function NotesPage({ params }) {
         onInsert={handleImageInsert}
         gameId={id}
       />
+      <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
     </>
   );
 }

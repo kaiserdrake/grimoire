@@ -5,6 +5,7 @@ import { AuthProvider } from '@/context/AuthContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { LastVisitedProvider } from '@/context/LastVisitedContext';
 import { TabStateProvider } from '@/context/TabStateContext';
+import { FocusProvider } from '@/context/FocusContext';
 
 const chakraTheme = extendTheme({
   config: {
@@ -23,9 +24,11 @@ export function Providers({ children }) {
       <ThemeProvider>
         <AuthProvider>
           <LastVisitedProvider>
-            <TabStateProvider>
-              {children}
-            </TabStateProvider>
+            <FocusProvider>
+              <TabStateProvider>
+                {children}
+              </TabStateProvider>
+            </FocusProvider>
           </LastVisitedProvider>
         </AuthProvider>
       </ThemeProvider>
