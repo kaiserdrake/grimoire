@@ -175,6 +175,35 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
   const zoomRef    = useRef(1);
   const [zoom, setZoomState] = useState(1);
 
+  const dragRef = useRef({ dragging: false, startX: 0, startScrollLeft: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    dragRef.current = { dragging: true, startX: e.clientX, startScrollLeft: bodyRef.current?.scrollLeft ?? 0 };
+    setIsDragging(true);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragRef.current.dragging || !bodyRef.current) return;
+      const dx = e.clientX - dragRef.current.startX;
+      bodyRef.current.scrollLeft = Math.max(0, dragRef.current.startScrollLeft - dx);
+      if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
+    };
+    const onUp = () => {
+      if (!dragRef.current.dragging) return;
+      dragRef.current.dragging = false;
+      setIsDragging(false);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
   const setZoom = useCallback((next) => {
     zoomRef.current = next;
     setZoomState(next);
@@ -294,12 +323,15 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
       <div
         ref={bodyRef}
         onScroll={onBodyScroll}
+        onMouseDown={handleMouseDown}
         className="gantt-body"
         style={{
           overflowX: 'auto',
           overflowY: 'auto',
           maxHeight: '480px',
           scrollbarWidth: 'none',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          userSelect: isDragging ? 'none' : 'auto',
         }}
       >
         <div style={{ width: `${innerWidth}px` }}>
@@ -886,6 +918,127 @@ function StatsPanel({ sessions, games, onOpenGame }) {
   );
 }
 
+// ── This Year Panel ───────────────────────────────────────────────────────────
+
+function ThisYearPanel({ sessions, games }) {
+  const [open, setOpen] = useState(false);
+  const currentYear = new Date().getFullYear();
+
+  const yearSessions = sessions.filter(s => s.start_date?.startsWith(String(currentYear)));
+  const yearGameIds  = new Set(yearSessions.map(s => s.game_id));
+
+  const gamesPlayedCount  = yearGameIds.size;
+  const playthroughsCount = yearSessions.length;
+  const completedCount    = yearSessions.filter(s => s.status === 'completed').length;
+
+  const newGamesCount = (() => {
+    const firstYear = {};
+    for (const s of sessions) {
+      const yr = s.start_date?.slice(0, 4);
+      if (!yr) continue;
+      if (!firstYear[s.game_id] || yr < firstYear[s.game_id]) firstYear[s.game_id] = yr;
+    }
+    return [...yearGameIds].filter(id => firstYear[id] === String(currentYear)).length;
+  })();
+
+  const gamesData = (() => {
+    const counts = {};
+    for (const s of yearSessions) counts[s.game_title] = (counts[s.game_title] || 0) + 1;
+    const entries = Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+    if (entries.length > 10) {
+      const othersVal = entries.slice(9).reduce((s, d) => s + d.value, 0);
+      return [...entries.slice(0, 9), { label: 'Others', value: othersVal }];
+    }
+    return entries;
+  })();
+
+  const genreData = (() => {
+    const counts = {};
+    for (const g of games) {
+      if (!yearGameIds.has(g.id)) continue;
+      const genres = g.genres || [];
+      if (genres.length === 0) counts['Unknown'] = (counts['Unknown'] || 0) + 1;
+      for (const genre of genres) counts[genre] = (counts[genre] || 0) + 1;
+    }
+    return Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  })();
+
+  const platformData = (() => {
+    const counts = {};
+    for (const s of yearSessions) {
+      const p = s.platform || 'Unknown';
+      counts[p] = (counts[p] || 0) + 1;
+    }
+    return Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  })();
+
+  const statusData = (() => {
+    const counts = {};
+    for (const s of yearSessions) {
+      const label = s.status === 'pend' ? 'Pended'
+        : s.status ? s.status.charAt(0).toUpperCase() + s.status.slice(1)
+        : 'Unknown';
+      counts[label] = (counts[label] || 0) + 1;
+    }
+    return Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  })();
+
+  return (
+    <Box mb={4} border="1px solid var(--color-border)" borderRadius="8px" overflow="hidden">
+      <HStack
+        px={3} py={1.5}
+        justify="space-between"
+        cursor="pointer"
+        bg="var(--color-bg-subtle)"
+        _hover={{ bg: 'var(--color-bg-hover)' }}
+        onClick={() => setOpen(v => !v)}
+        userSelect="none"
+      >
+        <HStack spacing={3}>
+          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">📆 This Year ({currentYear})</Text>
+          <HStack spacing={1.5}>
+            <Text fontSize="xs" color="var(--color-text-muted)">{gamesPlayedCount} games</Text>
+            <Text fontSize="xs" color="var(--color-text-muted)">·</Text>
+            <Text fontSize="xs" color="var(--color-text-muted)">{playthroughsCount} playthroughs</Text>
+            <Text fontSize="xs" color="var(--color-text-muted)">·</Text>
+            <Text fontSize="xs" color="var(--color-text-muted)">{completedCount} completed</Text>
+          </HStack>
+        </HStack>
+        {open
+          ? <ChevronUpIcon boxSize={3} color="var(--color-text-muted)" />
+          : <ChevronDownIcon boxSize={3} color="var(--color-text-muted)" />
+        }
+      </HStack>
+
+      {open && (
+        <Box px={3} py={3} bg="var(--color-bg-surface)">
+          <HStack spacing={5} mb={4} flexWrap="wrap">
+            {[
+              { label: 'Games Played', value: gamesPlayedCount },
+              { label: 'Playthroughs', value: playthroughsCount },
+              { label: 'Completed',    value: completedCount },
+              { label: 'New to Me',    value: newGamesCount },
+            ].map(stat => (
+              <Box key={stat.label}>
+                <Text fontSize="md" fontWeight="800" color="var(--color-accent)" lineHeight="1.1">{stat.value}</Text>
+                <Text fontSize="xs" color="var(--color-text-muted)">{stat.label}</Text>
+              </Box>
+            ))}
+          </HStack>
+
+          <Box display="grid" gridTemplateColumns={{ base: '1fr 1fr', xl: '1fr 1fr 1fr 1fr' }} gap={4} mb={5}>
+            <PieChart data={gamesData}    title="🎮 Games Played" />
+            <PieChart data={genreData}    title="🎭 Genres Played" />
+            <PieChart data={platformData} title="🖥️ Platforms" />
+            <PieChart data={statusData}   title="📋 Status Breakdown" />
+          </Box>
+
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── Range presets ─────────────────────────────────────────────────────────────
 function getRangeForPreset(preset, refDate) {
   const today = refDate || new Date();
@@ -1005,6 +1158,7 @@ export default function CalendarPage() {
           ) : (
             <>
               <StatsPanel sessions={sessions} games={games} onOpenGame={openGame} />
+              <ThisYearPanel sessions={sessions} games={games} />
 
               {/* ── Toolbar ── */}
               <HStack mb={4} justify="space-between" align="center" flexWrap="wrap" gap={2}>
