@@ -1410,6 +1410,13 @@ body {
   transition: background 0.12s;
 }
 
+.recent-drawer-game-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 /* TOC items inside the panel (reused) */
 .recent-drawer-toc-item {
   background: none;
