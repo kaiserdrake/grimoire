@@ -849,7 +849,6 @@ export default function NotesPage({ params }) {
                     }}>
                     Save
                   </Button> }
-                  {isPresentMode && (
                   <Button
                     size="xs"
                     leftIcon={<TbPin size={12} />}
@@ -860,9 +859,8 @@ export default function NotesPage({ params }) {
                       color: 'var(--color-text-muted)', border: 'none',
                     }}
                   >
-                  Pin
+                    Pin
                   </Button>
-                  )}
                   <Button size="xs"
                     leftIcon={isPresentMode ? <FiEdit3 size={11} /> : <FiEye size={11} />}
                     onClick={() => setIsPresentMode(m => !m)}
