@@ -260,14 +260,22 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
 // Tags each top-level preview block with the markdown line it starts on, so the
 // block matching the editor cursor can be highlighted.
 function rehypeSourceLine() {
-  return (tree) => {
-    for (const node of tree.children || []) {
-      const line = node.type === 'element' && node.position?.start?.line;
-      if (line) {
-        node.properties = node.properties || {};
-        node.properties['data-source-line'] = line;
-      }
+  const tag = (node) => {
+    const line = node.type === 'element' && node.position?.start?.line;
+    if (line) {
+      node.properties = node.properties || {};
+      node.properties['data-source-line'] = line;
     }
+  };
+  return (tree) => {
+    // Top-level blocks (paragraphs, headings, lists, tables, …).
+    for (const node of tree.children || []) tag(node);
+    // Also tag table rows so the cursor highlights a single row, not the whole table.
+    const visit = (node) => {
+      if (node.type === 'element' && node.tagName === 'tr') tag(node);
+      for (const child of node.children || []) visit(child);
+    };
+    visit(tree);
   };
 }
 
