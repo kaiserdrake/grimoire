@@ -471,6 +471,16 @@ body {
   .notes-preview-split { flex: 1; }
 }
 
+/* Highlight the preview block matching the editor cursor line */
+.notes-preview-split [data-source-line] {
+  border-radius: 2px;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.notes-preview-line-active {
+  background: var(--color-accent-subtle);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
 /* editor body — stacks toolbar + textarea vertically */
 .notes-editor-body {
   display: flex;

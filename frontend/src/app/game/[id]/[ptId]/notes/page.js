@@ -256,6 +256,21 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
   );
 }
 
+// ── Source-line mapping ───────────────────────────────────────────────────
+// Tags each top-level preview block with the markdown line it starts on, so the
+// block matching the editor cursor can be highlighted.
+function rehypeSourceLine() {
+  return (tree) => {
+    for (const node of tree.children || []) {
+      const line = node.type === 'element' && node.position?.start?.line;
+      if (line) {
+        node.properties = node.properties || {};
+        node.properties['data-source-line'] = line;
+      }
+    }
+  };
+}
+
 // ── Table of contents helpers ─────────────────────────────────────────────
 function extractHeadings(markdown) {
   const lines = markdown.split('\n');
@@ -579,8 +594,36 @@ export default function NotesPage({ params }) {
 
   const saveTimer   = useRef(null);
   const textareaRef = useRef(null);
+  const previewRef  = useRef(null);
+
+  const [activeLine, setActiveLine] = useState(null);
 
   const isDirty = content !== saved;
+
+  // Sync the editor cursor's line to the matching preview block.
+  const updateCursorLine = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const line = ta.value.slice(0, ta.selectionStart).split('\n').length;
+    setActiveLine(line);
+  }, []);
+
+  // Highlight the top-level preview block that contains the cursor line.
+  useEffect(() => {
+    const container = previewRef.current;
+    if (!container) return;
+    const els = container.querySelectorAll('[data-source-line]');
+    let active = null;
+    els.forEach((el) => {
+      el.classList.remove('notes-preview-line-active');
+      const ln = Number(el.getAttribute('data-source-line'));
+      if (activeLine != null && ln <= activeLine &&
+          (!active || ln > Number(active.getAttribute('data-source-line')))) {
+        active = el;
+      }
+    });
+    if (active) active.classList.add('notes-preview-line-active');
+  }, [activeLine, content, isPresentMode]);
 
   useEffect(() => {
     if (game) visitNotes(id, initialPtId, game.title, game.cover_url ?? null);
@@ -652,6 +695,7 @@ export default function NotesPage({ params }) {
   const handleChange = (e) => {
     const val = e.target.value;
     setContent(val);
+    updateCursorLine();
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(val), 2000);
   };
@@ -891,6 +935,9 @@ export default function NotesPage({ params }) {
                     className="notes-textarea notes-textarea-full"
                     value={content}
                     onChange={handleChange}
+                    onSelect={updateCursorLine}
+                    onClick={updateCursorLine}
+                    onKeyUp={updateCursorLine}
                     placeholder={`# Notes\n\nStart writing…\n\nMarkdown supported:\n- **bold**, *italic*, \`code\`\n- # Headings, > Blockquotes\n- | Tables |\n- ![alt](image-url) for images\n\nDrag & drop images to upload them.`}
                     spellCheck
                     onDragOver={handleDragOver}
@@ -902,11 +949,11 @@ export default function NotesPage({ params }) {
 
                 {!isPresentMode && <div className="notes-split-divider" />}
 
-                <div className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
+                <div ref={previewRef} className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
                   {content.trim()
                     ? <ReactMarkdown
                         remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
-                        rehypePlugins={[rehypeRaw]}
+                        rehypePlugins={[rehypeRaw, rehypeSourceLine]}
                         components={{
                           img: ({ node, ...props }) => (
                             <div className="img-resizer"><img {...props} /></div>
