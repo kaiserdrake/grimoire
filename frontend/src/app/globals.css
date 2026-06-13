@@ -480,6 +480,19 @@ body {
   background: var(--color-accent-subtle);
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
+/* Table rows highlight on their cells (tr background/shadow don't render under border-collapse) */
+tr.notes-preview-line-active {
+  background: none;
+  box-shadow: none;
+}
+tr.notes-preview-line-active td,
+tr.notes-preview-line-active th {
+  background: var(--color-accent-subtle);
+}
+tr.notes-preview-line-active td:first-child,
+tr.notes-preview-line-active th:first-child {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
 
 /* editor body — stacks toolbar + textarea vertically */
 .notes-editor-body {
