@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -26,6 +26,7 @@ import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
+import { makeRemarkNoteIconPlugin, buildIconMap, iconToken } from '@/utils/noteIcons';
 
 // ── Markdown editor helpers ───────────────────────────────────────────────────
 function insertAtCursor(textarea, before, after = '', placeholder = '') {
@@ -76,6 +77,61 @@ function GamepadPicker({ platform, onInsert, onClose }) {
                     onMouseDown={(e) => { e.preventDefault(); onInsert(canonical); }}>
                     <span dangerouslySetInnerHTML={{ __html: btn.html }} />
                     <span className="gp-picker-label">{canonical}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Note icon preset picker ─────────────────────────────────────────────────
+function NoteIconPicker({ iconGroups, apiBase, onInsert, onClose }) {
+  const groups = (iconGroups || []).filter(g => (g.icons || []).length > 0);
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backdropFilter: 'blur(2px)',
+      }}
+      onMouseDown={onClose}
+    >
+      <div
+        className="gp-picker"
+        style={{ position: 'static', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        {groups.length === 0 ? (
+          <div style={{ padding: '0.5rem 0.25rem', maxWidth: '240px' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+              No icon presets yet.
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+              Add icon groups in the Settings tab.
+            </div>
+          </div>
+        ) : groups.map(g => (
+          <div key={g.name}>
+            <div className="gp-picker-section">{g.name}</div>
+            <div className="gp-picker-row">
+              {g.icons.map((url, i) => {
+                const token = iconToken(g.name, i + 1);
+                return (
+                  <button key={token} className="gp-picker-btn"
+                    onMouseDown={(e) => { e.preventDefault(); onInsert(token); }}>
+                    <img
+                      className="note-icon"
+                      src={url.startsWith('http') ? url : `${apiBase}${url}`}
+                      alt={token}
+                      style={{ height: '26px' }}
+                      draggable={false}
+                    />
+                    <span className="gp-picker-label">{token}</span>
                   </button>
                 );
               })}
@@ -290,19 +346,27 @@ function extractHeadings(markdown) {
 }
 
 // ── Markdown toolbar ──────────────────────────────────────────────────────────
-function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) {
+function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, iconGroups, apiBase }) {
   const apply = (before, after = '', placeholder = '') => {
     if (!textareaRef.current) return;
     insertAtCursor(textareaRef.current, before, after, placeholder);
     onChange(textareaRef.current.value);
   };
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
   const insertBtn = (canonical) => {
     if (!textareaRef.current) return;
     insertAtCursor(textareaRef.current, `:btn[${canonical}]`);
     onChange(textareaRef.current.value);
     setPickerOpen(false);
+  };
+
+  const insertIcon = (token) => {
+    if (!textareaRef.current) return;
+    insertAtCursor(textareaRef.current, `:icon[${token}]`);
+    onChange(textareaRef.current.value);
+    setIconPickerOpen(false);
   };
 
   const ITEMS = [
@@ -324,6 +388,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
     )},
     null,
     { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
+    { icon: <FiTag size={12} />, label: 'Insert preset icon', action: () => setIconPickerOpen(o => !o) },
   ];
 
   return (
@@ -342,6 +407,14 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform }) 
           platform={platform}
           onInsert={insertBtn}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+      {iconPickerOpen && (
+        <NoteIconPicker
+          iconGroups={iconGroups}
+          apiBase={apiBase}
+          onInsert={insertIcon}
+          onClose={() => setIconPickerOpen(false)}
         />
       )}
     </div>
@@ -574,6 +647,8 @@ export default function NotesPage({ params }) {
   const [game, setGame]                     = useState(null);
   const [playthroughs, setPlaythroughs]     = useState([]);
   const [filesByPt, setFilesByPt]           = useState({});
+  const [apiBase, setApiBase]               = useState('');
+  const [iconGroups, setIconGroups]         = useState([]); // [{ name, icons: [url] }]
 
   const [renamingTopbar, setRenamingTopbar] = useState(false);
   const [loading, setLoading]               = useState(true);
@@ -636,6 +711,18 @@ export default function NotesPage({ params }) {
   useEffect(() => {
     if (game) visitNotes(id, initialPtId, game.title, game.cover_url ?? null);
   }, [game]);
+
+  useEffect(() => { getApiBase().then(setApiBase).catch(() => {}); }, []);
+
+  // ── Load this game's note icon presets ──────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    api.settings.get(`note_icons_${id}`)
+      .then(val => setIconGroups(Array.isArray(val) ? val : []))
+      .catch(() => {});
+  }, [id, user]);
+
+  const iconMap = buildIconMap(iconGroups, apiBase);
 
   useEffect(() => {
     if (!user) return;
@@ -937,6 +1024,8 @@ export default function NotesPage({ params }) {
                     }}
                     onOpenImageModal={() => setImageModalOpen(true)}
                     platform={gamepad}
+                    iconGroups={iconGroups}
+                    apiBase={apiBase}
                   />
                   <textarea
                     ref={textareaRef}
@@ -960,7 +1049,7 @@ export default function NotesPage({ params }) {
                 <div ref={previewRef} className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
                   {content.trim()
                     ? <ReactMarkdown
-                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
+                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap)]}
                         rehypePlugins={[rehypeRaw, rehypeSourceLine]}
                         components={{
                           img: ({ node, ...props }) => (

@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { Tooltip } from '@chakra-ui/react';
-import { FiFileText, FiMap, FiActivity } from 'react-icons/fi';
+import { FiFileText, FiMap, FiActivity, FiSettings } from 'react-icons/fi';
 
 // hasPlaythroughs: true = enabled, false = Notes/Maps grayed out, undefined/null = still loading (show enabled)
 export default function GameTabBar({ gameId, ptId, hasPlaythroughs = true }) {
@@ -10,13 +10,15 @@ export default function GameTabBar({ gameId, ptId, hasPlaythroughs = true }) {
   const pathname = usePathname();
 
   const activeTab = pathname.endsWith('/playthrough') ? 'playthrough'
-    : pathname.endsWith('/map')   ? 'map'
+    : pathname.endsWith('/map')      ? 'map'
+    : pathname.endsWith('/settings') ? 'settings'
     : 'notes';
 
   const tabs = [
     { key: 'playthrough', label: 'Playthrough', icon: FiActivity, href: `/game/${gameId}/${ptId}/playthrough`, disabled: false },
     { key: 'notes',       label: 'Notes',       icon: FiFileText, href: `/game/${gameId}/${ptId}/notes`,       disabled: !hasPlaythroughs },
     { key: 'map',         label: 'Maps',         icon: FiMap,      href: `/game/${gameId}/${ptId}/map`,         disabled: !hasPlaythroughs },
+    { key: 'settings',    label: 'Settings',    icon: FiSettings, href: `/game/${gameId}/${ptId}/settings`,    disabled: !hasPlaythroughs },
   ];
 
   return (
