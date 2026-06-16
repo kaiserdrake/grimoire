@@ -1128,7 +1128,7 @@ app.get('/api/games/:gameId/attachments', isAuthenticated, async (req, res) => {
 
     let q = 'SELECT id, set_type, filename, original_name, mime_type, url, source, created_at FROM game_attachments WHERE game_id=$1 AND user_id=$2';
     const params = [gameId, userId];
-    if (set && ['maps', 'notes'].includes(set)) {
+    if (set && ['maps', 'notes', 'icons'].includes(set)) {
       q += ' AND set_type=$3';
       params.push(set);
     }
@@ -1142,11 +1142,11 @@ app.get('/api/games/:gameId/attachments', isAuthenticated, async (req, res) => {
 });
 
 // Upload an attachment — multipart file upload
-// POST /api/games/:gameId/attachments/:set  (set = 'maps' | 'notes')
+// POST /api/games/:gameId/attachments/:set  (set = 'maps' | 'notes' | 'icons')
 app.post('/api/games/:gameId/attachments/:set', isAuthenticated, (req, res, next) => {
   // Validate set before multer runs so we don't write to a bad path
-  if (!['maps', 'notes'].includes(req.params.set)) {
-    return res.status(400).json({ message: "set must be 'maps' or 'notes'." });
+  if (!['maps', 'notes', 'icons'].includes(req.params.set)) {
+    return res.status(400).json({ message: "set must be 'maps', 'notes' or 'icons'." });
   }
   next();
 }, upload.single('file'), async (req, res) => {

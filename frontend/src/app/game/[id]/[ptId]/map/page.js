@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2 } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -22,161 +22,9 @@ import GameTabBar from '@/components/GameTabBar';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
-
-const PIN_COLORS = ['blue', 'red', 'green', 'yellow', 'purple', 'orange'];
-
-// ── Pin types: game-themed icons ──────────────────────────────────────────────
-// Each svg() receives the fill color. All major shapes carry stroke="black"
-// strokeWidth="1.5" with paintOrder="stroke fill" so the outline sits outside
-// the fill and never obscures interior detail.
-const PIN_TYPES = [
-  {
-    id: 'treasure',
-    label: 'Treasure',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        {/* Chest lid */}
-        <path d="M4 16 Q4 8 16 8 Q28 8 28 16 Z"
-          fill={fill} stroke="black" strokeWidth="1.5" strokeLinejoin="round"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* Chest body */}
-        <rect x="4" y="14" width="24" height="14" rx="2"
-          fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* Lid rim band */}
-        <rect x="4" y="14" width="24" height="3"
-          fill="rgba(0,0,0,0.18)" stroke="black" strokeWidth="1" />
-        {/* Lock plate */}
-        <rect x="13" y="17" width="6" height="5" rx="1"
-          fill="rgba(0,0,0,0.55)" stroke="black" strokeWidth="1" />
-        <circle cx="16" cy="19" r="1.4" fill="rgba(255,255,255,0.55)" />
-        {/* Hinges */}
-        <rect x="5" y="13" width="3" height="3" rx="0.5"
-          fill="rgba(0,0,0,0.5)" stroke="black" strokeWidth="0.8" />
-        <rect x="24" y="13" width="3" height="3" rx="0.5"
-          fill="rgba(0,0,0,0.5)" stroke="black" strokeWidth="0.8" />
-      </svg>
-    ),
-  },
-  {
-    id: 'quest',
-    label: 'Quest',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        {/* Scroll body */}
-        <rect x="7" y="6" width="18" height="22" rx="2"
-          fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* Top curl */}
-        <ellipse cx="16" cy="6" rx="9" ry="3"
-          fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* Bottom curl */}
-        <ellipse cx="16" cy="28" rx="9" ry="3"
-          fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* Text lines */}
-        <line x1="10" y1="12" x2="22" y2="12" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="10" y1="16" x2="22" y2="16" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="10" y1="20" x2="18" y2="20" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5" strokeLinecap="round" />
-        {/* Wax seal */}
-        <circle cx="21" cy="24" r="3" fill="rgba(0,0,0,0.4)" stroke="black" strokeWidth="1" />
-      </svg>
-    ),
-  },
-  {
-    id: 'exclamation',
-    label: 'Alert',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        {/* Shield */}
-        <path d="M16 3 L28 8 L28 20 Q28 28 16 30 Q4 28 4 20 L4 8 Z"
-          fill={fill} stroke="black" strokeWidth="1.5" strokeLinejoin="round"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* ! bar */}
-        <rect x="14" y="9" width="4" height="11" rx="2"
-          fill="white" stroke="black" strokeWidth="0.8"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* ! dot */}
-        <circle cx="16" cy="24" r="2.2"
-          fill="white" stroke="black" strokeWidth="0.8"
-          style={{ paintOrder: 'stroke fill' }} />
-      </svg>
-    ),
-  },
-  {
-    id: 'question',
-    label: 'Unknown',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        {/* Circle background */}
-        <circle cx="16" cy="16" r="13"
-          fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        {/* ? mark — stroked text for outline */}
-        <text x="16" y="22" textAnchor="middle" fontSize="16" fontWeight="bold" fontFamily="serif"
-          fill="white" stroke="black" strokeWidth="1" strokeLinejoin="round"
-          style={{ paintOrder: 'stroke fill' }}>?</text>
-      </svg>
-    ),
-  },
-  {
-    id: 'battle',
-    label: 'Battle',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        {/* Black outline layer drawn first (behind) */}
-        <line x1="6" y1="6" x2="26" y2="26" stroke="black" strokeWidth="5.5" strokeLinecap="round" />
-        <line x1="26" y1="6" x2="6" y2="26" stroke="black" strokeWidth="5.5" strokeLinecap="round" />
-        <line x1="9" y1="13" x2="19" y2="3" stroke="black" strokeWidth="3.5" strokeLinecap="round" />
-        <line x1="23" y1="13" x2="13" y2="3" stroke="black" strokeWidth="3.5" strokeLinecap="round" />
-        {/* Colored layer on top */}
-        <line x1="6" y1="6" x2="26" y2="26" stroke={fill} strokeWidth="3.5" strokeLinecap="round" />
-        <line x1="26" y1="6" x2="6" y2="26" stroke={fill} strokeWidth="3.5" strokeLinecap="round" />
-        <line x1="9" y1="13" x2="19" y2="3" stroke={fill} strokeWidth="2" strokeLinecap="round" />
-        <line x1="23" y1="13" x2="13" y2="3" stroke={fill} strokeWidth="2" strokeLinecap="round" />
-        {/* Center gem */}
-        <circle cx="16" cy="16" r="3.5" fill={fill} stroke="black" strokeWidth="1.5"
-          style={{ paintOrder: 'stroke fill' }} />
-        <circle cx="16" cy="16" r="1.5" fill="rgba(255,255,255,0.5)" />
-      </svg>
-    ),
-  },
-  {
-    id: 'location',
-    label: 'Location',
-    svg: (fill) => (
-      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 3C11.03 3 7 7.03 7 12c0 7.88 9 17 9 17s9-9.12 9-17c0-4.97-4.03-9-9-9z"
-          fill={fill} stroke="black" strokeWidth="1.5" strokeLinejoin="round"
-          style={{ paintOrder: 'stroke fill' }} />
-        <circle cx="16" cy="12" r="3.5" fill="rgba(255,255,255,0.65)" stroke="black" strokeWidth="1"
-          style={{ paintOrder: 'stroke fill' }} />
-      </svg>
-    ),
-  },
-];
-
-// ── Helper to parse stored "color:icon" or plain "color" ─────────────────────
-function parsePinStyle(stored) {
-  if (!stored) return { color: 'blue', icon: 'location' };
-  const [color, icon] = stored.split(':');
-  return { color: color || 'blue', icon: icon || 'location' };
-}
-function encodePinStyle(color, icon) {
-  return `${color}:${icon}`;
-}
-
-// ── Pin rendered on the map ───────────────────────────────────────────────────
-const PinIcon = ({ color, icon = 'location' }) => {
-  const type = PIN_TYPES.find(t => t.id === icon) ?? PIN_TYPES[PIN_TYPES.length - 1];
-  const fill = `var(--color-pin-${color})`;
-  return (
-    <div style={{ width: 32, height: 32 }}>
-      {type.svg(fill)}
-    </div>
-  );
-};
+import {
+  PIN_COLORS, PIN_TYPES, parsePinStyle, encodePinStyle, PinIcon,
+} from '@/constants/pins';
 
 // ── Hold-to-delete ────────────────────────────────────────────────────────────
 const HOLD_DURATION = 1800;
@@ -272,8 +120,45 @@ function disambiguatePinLabels(pins) {
   });
 }
 
+// ── Statistics column (used in the pin-statistics popover) ────────────────────
+function StatColumn({ title, stats, emptyHint }) {
+  const total = stats.reduce((sum, s) => sum + s.count, 0);
+  return (
+    <Box minW={0}>
+      <Flex align="baseline" justify="space-between" mb={2} gap={2}>
+        <Text fontSize="11px" fontWeight={700} textTransform="uppercase"
+          letterSpacing="0.06em" style={{ color: 'var(--color-text-muted)' }}>
+          {title}
+        </Text>
+        <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>{total}</Text>
+      </Flex>
+      {stats.length === 0 ? (
+        <Text fontSize="xs" style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+          {emptyHint}
+        </Text>
+      ) : (
+        <VStack spacing={1} align="stretch">
+          {stats.map((d, i) => (
+            <Flex key={`${d.color}:${d.icon}:${d.label}:${i}`} align="center" gap={2}>
+              <Box flexShrink={0}><PinIcon color={d.color} icon={d.icon} size={18} /></Box>
+              <Text fontSize="sm" flex={1} noOfLines={1}
+                style={{ color: 'var(--color-text-secondary)' }}>
+                {d.label}
+              </Text>
+              <Text fontSize="sm" fontWeight={700}
+                style={{ color: 'var(--color-text-primary)' }}>
+                {d.count}
+              </Text>
+            </Flex>
+          ))}
+        </VStack>
+      )}
+    </Box>
+  );
+}
+
 // ── Pin Modal (Add & Edit) ────────────────────────────────────────────────────
-function PinModal({ isOpen, onClose, onSave, onDelete, pin, defaultLabel }) {
+function PinModal({ isOpen, onClose, onSave, onDelete, pin, defaultLabel, mapDefaults = [] }) {
   const [label,  setLabel]  = useState('');
   const [desc,   setDesc]   = useState('');
   const [color,  setColor]  = useState('blue');
@@ -303,6 +188,14 @@ function PinModal({ isOpen, onClose, onSave, onDelete, pin, defaultLabel }) {
     }
   }, [isOpen, pin]);
 
+  // Clicking a configured default marker fills in its label, type and color.
+  // The user can freely tweak any of them afterwards.
+  const applyDefault = (d) => {
+    setLabel(d.label);
+    setColor(d.color);
+    setIcon(d.icon);
+  };
+
   const handleSave = async () => {
     if (!label.trim()) return;
     setSaving(true);
@@ -331,6 +224,40 @@ function PinModal({ isOpen, onClose, onSave, onDelete, pin, defaultLabel }) {
         <ModalCloseButton />
         <ModalBody>
           <VStack spacing={3} align="stretch">
+            {/* Default markers — one click sets label, type and color */}
+            {mapDefaults.length > 0 && (
+              <FormControl>
+                <FormLabel fontSize="xs" style={{ color: 'var(--color-text-secondary)' }}>Default markers</FormLabel>
+                <Box display="flex" flexWrap="wrap" gap={1.5}>
+                  {mapDefaults.map((d, i) => {
+                    const active = label === d.label && color === d.color && icon === d.icon;
+                    return (
+                      <Box
+                        as="button"
+                        key={`${d.color}:${d.icon}:${i}`}
+                        type="button"
+                        onClick={() => applyDefault(d)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                          padding: '3px 8px 3px 5px',
+                          borderRadius: '999px',
+                          border: active ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                          background: active ? 'var(--color-accent-subtle)' : 'var(--color-bg-subtle)',
+                          color: 'var(--color-text-primary)',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          transition: 'border-color 0.1s, background 0.1s',
+                        }}
+                      >
+                        <PinIcon color={d.color} icon={d.icon} size={16} />
+                        <span>{d.label}</span>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </FormControl>
+            )}
+
             <FormControl isRequired>
               <FormLabel fontSize="xs" style={{ color: 'var(--color-text-secondary)' }}>Label</FormLabel>
               <Input
@@ -734,6 +661,7 @@ export default function MapPage({ params }) {
   const [playthroughs, setPlaythroughs] = useState([]);
   const [mapsByPt,     setMapsByPt]     = useState({});
   const [pinsByMap,    setPinsByMap]    = useState({});
+  const [mapDefaults,  setMapDefaults]  = useState([]); // [{ icon, color, label }]
   const [loading,      setLoading]      = useState(true);
 
   // ── Active selection (persisted via TabStateContext) ────────────────────────
@@ -792,6 +720,14 @@ export default function MapPage({ params }) {
         setMapsByPt(byPt);
 
         const allMaps    = Object.values(byPt).flat();
+
+        // Eager-load pins for every map so the sidebar tree and the per-game
+        // pin statistics are accurate without waiting for each map to be opened.
+        const pinLists = await Promise.all(allMaps.map(m => api.pins.list(m.id).catch(() => [])));
+        const pinsObj = {};
+        allMaps.forEach((m, i) => { pinsObj[m.id] = pinLists[i]; });
+        setPinsByMap(pinsObj);
+
         const savedMapId = mapStateRef.current.activeMapId;
         const restoredMap = savedMapId != null
           ? allMaps.find((m) => m.id == savedMapId)
@@ -802,12 +738,6 @@ export default function MapPage({ params }) {
             byPt[ptId].some((m) => m.id === restoredMap.id)
           );
           setActivePtId(restoredPtId);
-          try {
-            const pinsData = await api.pins.list(restoredMap.id);
-            setPinsByMap(prev => ({ ...prev, [restoredMap.id]: pinsData }));
-          } catch (err) {
-            toast({ title: 'Failed to load pins', description: err.message, status: 'error', duration: 3000 });
-          }
         } else {
           const initialPt = pts.find(p => String(p.id) === String(initialPtId)) ?? pts[0];
           if (initialPt) {
@@ -825,6 +755,14 @@ export default function MapPage({ params }) {
   }, [id, user]);
 
   useEffect(() => { getApiBase().then(setApiBase).catch(() => {}); }, []);
+
+  // ── Load the per-game map defaults (type:color:label) from settings ─────────
+  useEffect(() => {
+    if (!user) return;
+    api.settings.get(`map_defaults_${id}`)
+      .then(val => setMapDefaults(Array.isArray(val) ? val : []))
+      .catch(() => {});
+  }, [id, user]);
 
   // ── Select a map — loads its pins ──────────────────────────────────────────
   const selectMap = async (ptId, map, currentMapsByPt = mapsByPt) => {
@@ -1068,6 +1006,34 @@ export default function MapPage({ params }) {
 
   const activePins = activeMap ? (pinsByMap[activeMap.id] || []) : [];
 
+  // ── Per-game pin statistics (across all maps in this game) ──────────────────
+  // Left column: each configured default and how many pins match its
+  // color:icon — e.g. "Rare Item A : 6 total".
+  // Right column: every remaining pin whose color:icon is NOT a configured
+  // default, grouped by label.
+  const allPins = Object.values(pinsByMap).flat();
+  const defaultStats = mapDefaults.map(d => ({
+    ...d,
+    count: allPins.filter(p => {
+      const s = parsePinStyle(p.color);
+      return s.color === d.color && s.icon === d.icon;
+    }).length,
+  }));
+
+  const defaultKeys = new Set(mapDefaults.map(d => `${d.color}:${d.icon}`));
+  const nonDefaultStats = Object.values(
+    allPins.reduce((acc, p) => {
+      const s = parsePinStyle(p.color);
+      if (defaultKeys.has(`${s.color}:${s.icon}`)) return acc;
+      const key = `${s.color}:${s.icon}:${p.label}`;
+      if (!acc[key]) acc[key] = { icon: s.icon, color: s.color, label: p.label, count: 0 };
+      acc[key].count++;
+      return acc;
+    }, {})
+  ).sort((a, b) => b.count - a.count);
+
+  const hasStats = defaultStats.length > 0 || nonDefaultStats.length > 0;
+
   // Build SVG polyline points string from waypoints
   const buildPolylinePoints = (waypoints, containerRect) => {
     if (!containerRect || waypoints.length < 2) return '';
@@ -1154,6 +1120,39 @@ export default function MapPage({ params }) {
                           }}
                         />
                       </Tooltip>
+
+                      {/* Pin statistics */}
+                      {hasStats && (
+                        <Popover placement="bottom-start" closeOnBlur>
+                          <PopoverTrigger>
+                            <Box as="span" display="inline-flex">
+                              <Tooltip label="Pin statistics" hasArrow placement="bottom" openDelay={300}>
+                                <IconButton
+                                  icon={<FiBarChart2 size={15} />}
+                                  size="xs"
+                                  aria-label="Pin statistics"
+                                  style={{
+                                    background: 'var(--color-bg-subtle)',
+                                    color: 'var(--color-text-secondary)',
+                                    border: '1px solid var(--color-border)',
+                                  }}
+                                />
+                              </Tooltip>
+                            </Box>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="map-pin-popover"
+                            style={{ color: 'var(--color-text-primary)', width: '400px' }}
+                          >
+                            <PopoverBody py={3} px={3}>
+                              <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
+                                <StatColumn title="Defaults" stats={defaultStats} emptyHint="None configured." />
+                                <StatColumn title="Other" stats={nonDefaultStats} emptyHint="No other pins." />
+                              </Box>
+                            </PopoverBody>
+                          </PopoverContent>
+                        </Popover>
+                      )}
                     </HStack>
                   )}
                 </HStack>
@@ -1484,6 +1483,7 @@ export default function MapPage({ params }) {
         onSave={editingPin ? handleEditPin : handleAddPin}
         pin={editingPin ?? undefined}
         defaultLabel={`Pin ${activePins.length + 1}`}
+        mapDefaults={mapDefaults}
       />
 
       {/* ── Map Modal ── */}
