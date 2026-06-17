@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, HStack, VStack, Text, Spinner, Button, useToast, Tooltip, Input } from '@chakra-ui/react';
 import { ArrowBackIcon, ArrowForwardIcon, ChevronDownIcon, ChevronUpIcon, AddIcon } from '@chakra-ui/icons';
 import Navbar from '@/components/Navbar';
@@ -9,6 +9,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import { useAuth } from '@/context/AuthContext';
 import { useTabState } from '@/context/TabStateContext';
 import { api } from '@/utils/api';
+import { SATISFACTION_SCALE } from '@/constants/playthroughs';
 
 // ── Color by playthrough status ──────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -163,17 +164,60 @@ const GANTT_BODY_STYLE = (
   <style>{`.gantt-body::-webkit-scrollbar { display: none; }`}</style>
 );
 
-function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, sortKey, sortDir }) {
+// Shared zoom + horizontal-scroll controller so the Gantt and the Personal
+// Rating graph stay in lock-step. Any registered scroll container is kept at the
+// same scrollLeft, and `zoom` drives both charts' inner content width.
+function useChartViewport() {
+  const [zoom, setZoomState] = useState(1);
+  const zoomRef       = useRef(1);
+  const scrollersRef  = useRef(new Set());
+  const lastScrollRef = useRef(0);
+
+  const setZoom = useCallback((next) => {
+    const z = Math.max(0.3, Math.min(10, next));
+    zoomRef.current = z;
+    setZoomState(z);
+  }, []);
+
+  const registerScroller = useCallback((el) => {
+    if (!el) return;
+    scrollersRef.current.add(el);
+    if (Math.abs(el.scrollLeft - lastScrollRef.current) > 0.5) el.scrollLeft = lastScrollRef.current;
+  }, []);
+
+  const unregisterScroller = useCallback((el) => {
+    if (el) scrollersRef.current.delete(el);
+  }, []);
+
+  const setScrollLeft = useCallback((sl, except) => {
+    const v = Math.max(0, sl);
+    lastScrollRef.current = v;
+    scrollersRef.current.forEach((el) => {
+      if (el !== except && Math.abs(el.scrollLeft - v) > 0.5) el.scrollLeft = v;
+    });
+  }, []);
+
+  const reset = useCallback(() => {
+    zoomRef.current = 1;
+    setZoomState(1);
+    lastScrollRef.current = 0;
+    scrollersRef.current.forEach((el) => { el.scrollLeft = 0; });
+  }, []);
+
+  return { zoom, zoomRef, setZoom, registerScroller, unregisterScroller, setScrollLeft, reset };
+}
+
+function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, sortKey, sortDir, viewport }) {
   const today = new Date();
   const rows  = buildGanttRows(sessions, rangeStart, rangeEnd, sortKey, sortDir);
   const { monthTicks, yearTicks, multiYear } = buildTicks(rangeStart, rangeEnd);
   const todayPct = todayPosition(rangeStart, rangeEnd);
 
+  const { zoom, zoomRef, setZoom, registerScroller, unregisterScroller, setScrollLeft } = viewport;
+
   const headerRef  = useRef(null);
   const bodyRef    = useRef(null);
   const outerRef   = useRef(null);
-  const zoomRef    = useRef(1);
-  const [zoom, setZoomState] = useState(1);
 
   const dragRef = useRef({ dragging: false, startX: 0, startScrollLeft: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -186,10 +230,9 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
 
   useEffect(() => {
     const onMove = (e) => {
-      if (!dragRef.current.dragging || !bodyRef.current) return;
+      if (!dragRef.current.dragging) return;
       const dx = e.clientX - dragRef.current.startX;
-      bodyRef.current.scrollLeft = Math.max(0, dragRef.current.startScrollLeft - dx);
-      if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
+      setScrollLeft(dragRef.current.startScrollLeft - dx);
     };
     const onUp = () => {
       if (!dragRef.current.dragging) return;
@@ -202,22 +245,20 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
-  }, []);
-
-  const setZoom = useCallback((next) => {
-    zoomRef.current = next;
-    setZoomState(next);
-  }, []);
+  }, [setScrollLeft]);
 
   const innerWidth = Math.max(600, zoom * CHART_BASE_PX);
+  const hasRows = rows.length > 0;
 
-  // Sync horizontal scroll between header and body
-  const onHeaderScroll = () => {
-    if (bodyRef.current) bodyRef.current.scrollLeft = headerRef.current.scrollLeft;
-  };
-  const onBodyScroll = () => {
-    if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
-  };
+  // Register header + body with the shared viewport so scroll stays in sync.
+  useEffect(() => {
+    const h = headerRef.current, b = bodyRef.current;
+    if (h) registerScroller(h);
+    if (b) registerScroller(b);
+    return () => { if (h) unregisterScroller(h); if (b) unregisterScroller(b); };
+  }, [hasRows, registerScroller, unregisterScroller]);
+
+  const onScrollerScroll = (e) => setScrollLeft(e.currentTarget.scrollLeft, e.currentTarget);
 
   // Cursor-aware zoom: the point under the cursor stays fixed
   const handleWheel = useCallback((e) => {
@@ -231,24 +272,16 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
       const scrollLeft   = bodyRef.current.scrollLeft;
       // Cursor offset from the left edge of the bar area (excluding sticky label)
       const barCursorX   = (e.clientX - rect.left) - LABEL_WIDTH;
-      // Absolute position in bar-area content space
       const barContentX  = barCursorX + scrollLeft;
-      // Scale to new zoom
       const scale        = nextZoom / prevZoom;
       const newScrollLeft = barContentX * scale - barCursorX;
 
       setZoom(nextZoom);
-
-      requestAnimationFrame(() => {
-        if (bodyRef.current) {
-          bodyRef.current.scrollLeft   = Math.max(0, newScrollLeft);
-          if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
-        }
-      });
+      requestAnimationFrame(() => setScrollLeft(newScrollLeft));
     } else {
       setZoom(nextZoom);
     }
-  }, [setZoom]);
+  }, [setZoom, setScrollLeft, zoomRef]);
 
   // Attach wheel listener (non-passive so we can preventDefault)
   useEffect(() => {
@@ -273,21 +306,10 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
     <Box ref={outerRef} border="1px solid var(--color-border-subtle)" borderRadius="6px" overflow="hidden">
       {GANTT_BODY_STYLE}
 
-      {/* ── Zoom indicator ── */}
-      {zoom !== 1 && (
-        <div style={{
-          position: 'absolute', right: '12px', marginTop: '4px',
-          fontSize: '0.65rem', color: 'var(--color-text-muted)',
-          pointerEvents: 'none', zIndex: 20, userSelect: 'none',
-        }}>
-          {Math.round(zoom * 100)}%
-        </div>
-      )}
-
       {/* ── Header: label spacer + tick area ── */}
       <div
         ref={headerRef}
-        onScroll={onHeaderScroll}
+        onScroll={onScrollerScroll}
         style={{
           overflowX: 'auto',
           overflowY: 'hidden',
@@ -322,7 +344,7 @@ function GanttChart({ sessions, rangeStart, rangeEnd, onBarClick, onGameClick, s
       {/* ── Body: rows + bars ── */}
       <div
         ref={bodyRef}
-        onScroll={onBodyScroll}
+        onScroll={onScrollerScroll}
         onMouseDown={handleMouseDown}
         className="gantt-body"
         style={{
@@ -1082,6 +1104,359 @@ function getRangeForPreset(preset, refDate) {
   return null;
 }
 
+// ── Personal Rating graph ──────────────────────────────────────────────────────
+// A scatter of playthroughs: X = time (shares the gantt's range), Y = personal
+// satisfaction (continuous 1–5). Each point is a circular game cover that can be
+// dragged vertically to set its rating; a click (no drag) opens the game.
+
+const RATING_PLOT_H = 220;   // plot area height in px
+const RATING_INSET  = 34;    // vertical padding so edge circles + drag arrows aren't clipped
+const RATING_CIRCLE = 30;    // cover diameter in px
+const RATING_MIN = SATISFACTION_SCALE[0].value;                         // 1
+const RATING_MAX = SATISFACTION_SCALE[SATISFACTION_SCALE.length - 1].value; // 5
+
+const RATING_USABLE_TOP    = RATING_INSET;
+const RATING_USABLE_BOTTOM = RATING_PLOT_H - RATING_INSET;
+
+// Hides the horizontal scrollbar on the rating body (mirrors the gantt body)
+const RATING_BODY_STYLE = (
+  <style>{`.rating-body::-webkit-scrollbar { display: none; }`}</style>
+);
+
+function ratingToY(r) {
+  const t = (r - RATING_MIN) / (RATING_MAX - RATING_MIN);
+  return RATING_USABLE_BOTTOM - t * (RATING_USABLE_BOTTOM - RATING_USABLE_TOP);
+}
+function yToRating(y) {
+  const t = (RATING_USABLE_BOTTOM - y) / (RATING_USABLE_BOTTOM - RATING_USABLE_TOP);
+  return Math.min(RATING_MAX, Math.max(RATING_MIN, RATING_MIN + t * (RATING_MAX - RATING_MIN)));
+}
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function nearestSatisfaction(r) {
+  return SATISFACTION_SCALE.reduce((best, lvl) =>
+    Math.abs(lvl.value - r) < Math.abs(best.value - r) ? lvl : best
+  );
+}
+
+function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, viewport }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(true);
+  const [overrides, setOverrides] = useState({}); // playthrough_id → live/optimistic rating
+  const plotRef   = useRef(null);
+  const headerRef = useRef(null);
+  const bodyRef   = useRef(null);
+  const outerRef  = useRef(null);
+  const dragRef   = useRef(null); // { ptId, gameId, startX, startY, moved }
+  const [draggingId, setDraggingId] = useState(null);
+
+  const { zoom, zoomRef, setZoom, registerScroller, unregisterScroller, setScrollLeft } = viewport;
+
+  const totalDays = diffDays(rangeStart, rangeEnd) + 1;
+  const { monthTicks, yearTicks, multiYear } = buildTicks(rangeStart, rangeEnd);
+  const todayPct = todayPosition(rangeStart, rangeEnd);
+  const innerWidth = Math.max(600, zoom * CHART_BASE_PX);
+
+  // One point per playthrough, anchored at its end date (latest session end;
+  // ongoing sessions count as today), kept only if that anchor is in range.
+  const { points, serverRatings } = useMemo(() => {
+    const byPt = new Map();
+    const ratings = {};
+    for (const s of sessions) {
+      const start = parseDate(s.start_date);
+      if (!start) continue;
+      const end = s.end_date ? parseDate(s.end_date) : new Date();
+      ratings[s.playthrough_id] = s.rating == null ? 2 : Number(s.rating);
+      const cur = byPt.get(s.playthrough_id);
+      if (!cur) {
+        byPt.set(s.playthrough_id, {
+          playthrough_id: s.playthrough_id,
+          game_id: s.game_id,
+          game_title: s.game_title,
+          cover_url: s.cover_url,
+          maxEnd: end,
+        });
+      } else if (end > cur.maxEnd) {
+        cur.maxEnd = end;
+      }
+    }
+    const arr = [];
+    for (const p of byPt.values()) {
+      if (p.maxEnd < rangeStart || p.maxEnd > rangeEnd) continue;
+      arr.push({ ...p, x: (diffDays(rangeStart, p.maxEnd) / totalDays) * 100 });
+    }
+    return { points: arr, serverRatings: ratings };
+  }, [sessions, rangeStart, rangeEnd, totalDays]);
+
+  const getRating = (ptId) => {
+    const v = overrides[ptId] ?? serverRatings[ptId];
+    return v == null ? 2 : v;
+  };
+
+  const onCircleMouseDown = (e, p) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { ptId: p.playthrough_id, gameId: p.game_id, startX: e.clientX, startY: e.clientY, moved: false };
+    setDraggingId(p.playthrough_id);
+  };
+
+  // Vertical-only drag to set the rating; a click (no drag) opens the game.
+  useEffect(() => {
+    const onMove = (e) => {
+      const d = dragRef.current;
+      if (!d || !plotRef.current) return;
+      if (Math.abs(e.clientX - d.startX) > 4 || Math.abs(e.clientY - d.startY) > 4) d.moved = true;
+      const rect = plotRef.current.getBoundingClientRect();
+      const r = yToRating(e.clientY - rect.top);
+      setOverrides((o) => ({ ...o, [d.ptId]: r }));
+    };
+    const onUp = () => {
+      const d = dragRef.current;
+      if (!d) return;
+      dragRef.current = null;
+      setDraggingId(null);
+      if (!d.moved) {
+        setOverrides((o) => { const n = { ...o }; delete n[d.ptId]; return n; });
+        onOpenGame(d.gameId);
+        return;
+      }
+      setOverrides((o) => {
+        const val = o[d.ptId];
+        if (val != null) {
+          api.playthroughs.update(d.ptId, { rating: round2(val) }).catch((err) => {
+            toast({ title: 'Could not save rating', description: err.message, status: 'error', duration: 3000 });
+          });
+        }
+        return o;
+      });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [onOpenGame, toast]);
+
+  const hasPoints = points.length > 0;
+
+  // Register header + body with the shared viewport (sync zoom/scroll with the gantt).
+  useEffect(() => {
+    const h = headerRef.current, b = bodyRef.current;
+    if (h) registerScroller(h);
+    if (b) registerScroller(b);
+    return () => { if (h) unregisterScroller(h); if (b) unregisterScroller(b); };
+  }, [hasPoints, open, registerScroller, unregisterScroller]);
+
+  const onScrollerScroll = (e) => setScrollLeft(e.currentTarget.scrollLeft, e.currentTarget);
+
+  // Cursor-aware wheel zoom, shared with the gantt via the viewport.
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const factor   = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const prevZoom = zoomRef.current;
+    const nextZoom = Math.max(0.3, Math.min(10, prevZoom * factor));
+    if (bodyRef.current) {
+      const rect         = bodyRef.current.getBoundingClientRect();
+      const scrollLeft   = bodyRef.current.scrollLeft;
+      const barCursorX   = (e.clientX - rect.left) - LABEL_WIDTH;
+      const barContentX  = barCursorX + scrollLeft;
+      const scale        = nextZoom / prevZoom;
+      const newScrollLeft = barContentX * scale - barCursorX;
+      setZoom(nextZoom);
+      requestAnimationFrame(() => setScrollLeft(newScrollLeft));
+    } else {
+      setZoom(nextZoom);
+    }
+  }, [setZoom, setScrollLeft, zoomRef]);
+
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel, hasPoints, open]);
+
+  const headerHeight = multiYear ? 36 : 18;
+
+  return (
+    <Box mb={4} border="1px solid var(--color-border)" borderRadius="8px" overflow="hidden">
+      {/* ── Collapsible header ── */}
+      <HStack
+        px={3} py={1.5}
+        justify="space-between"
+        cursor="pointer"
+        bg="var(--color-bg-subtle)"
+        _hover={{ bg: 'var(--color-bg-hover)' }}
+        onClick={() => setOpen(v => !v)}
+        userSelect="none"
+      >
+        <HStack spacing={3}>
+          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">⭐ Personal Rating</Text>
+          <Text fontSize="xs" color="var(--color-text-muted)">{points.length} playthroughs · drag a cover up/down to rate</Text>
+        </HStack>
+        {open
+          ? <ChevronUpIcon boxSize={3} color="var(--color-text-muted)" />
+          : <ChevronDownIcon boxSize={3} color="var(--color-text-muted)" />
+        }
+      </HStack>
+
+      {open && (
+        <Box px={3} py={3} bg="var(--color-bg-surface)">
+          {points.length === 0 ? (
+            <Box textAlign="center" py={10}>
+              <Text fontSize="2xl" mb={2}>⭐</Text>
+              <Text color="var(--color-text-muted)" fontSize="sm">No playthroughs in this period.</Text>
+            </Box>
+          ) : (
+            <Box ref={outerRef} position="relative" border="1px solid var(--color-border-subtle)" borderRadius="6px" overflow="hidden">
+              {RATING_BODY_STYLE}
+
+              {/* ── Tick header (month / year) ── */}
+              <div
+                ref={headerRef}
+                onScroll={onScrollerScroll}
+                style={{
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'var(--color-border) transparent',
+                  borderBottom: '1px solid var(--color-border-subtle)',
+                  background: 'var(--color-bg-subtle)',
+                }}
+              >
+                <div style={{ display: 'flex', width: `${innerWidth}px`, padding: '6px 0 4px' }}>
+                  <div style={{ width: `${LABEL_WIDTH}px`, flexShrink: 0 }} />
+                  <div style={{ flex: 1, position: 'relative', height: `${headerHeight}px` }}>
+                    {multiYear && yearTicks.map((t, i) => (
+                      <span key={`y${i}`} style={{
+                        position: 'absolute', left: `${t.left}%`, top: 0,
+                        fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap', userSelect: 'none',
+                      }}>{t.label}</span>
+                    ))}
+                    {monthTicks.map((t, i) => (
+                      <span key={`m${i}`} style={{
+                        position: 'absolute', left: `${t.left}%`, top: multiYear ? '16px' : '0',
+                        fontSize: '0.65rem', color: 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap', userSelect: 'none',
+                      }}>{t.label}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Body: Y labels (sticky) + scatter area ── */}
+              <div
+                ref={bodyRef}
+                onScroll={onScrollerScroll}
+                className="rating-body"
+                style={{ overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none' }}
+              >
+                <div style={{ display: 'flex', width: `${innerWidth}px` }}>
+                  {/* Frozen Y-axis labels */}
+                  <div style={{
+                    width: `${LABEL_WIDTH}px`, flexShrink: 0,
+                    position: 'sticky', left: 0, zIndex: 10,
+                    background: 'var(--color-bg-surface)', height: `${RATING_PLOT_H}px`,
+                  }}>
+                    {SATISFACTION_SCALE.map((lvl) => (
+                      <span key={lvl.value} style={{
+                        position: 'absolute', right: '10px', top: `${ratingToY(lvl.value)}px`,
+                        transform: 'translateY(-50%)', textAlign: 'right',
+                        fontSize: '0.64rem', fontWeight: 600, color: 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap', userSelect: 'none',
+                      }}>{lvl.label}</span>
+                    ))}
+                  </div>
+
+                  {/* Scatter track */}
+                  <div
+                    ref={plotRef}
+                    style={{ flex: 1, position: 'relative', height: `${RATING_PLOT_H}px`, background: 'var(--color-bg-subtle)' }}
+                  >
+                    {/* Gridlines per satisfaction level */}
+                    {SATISFACTION_SCALE.map((lvl) => (
+                      <div key={lvl.value} style={{
+                        position: 'absolute', left: 0, right: 0, top: `${ratingToY(lvl.value)}px`,
+                        height: '1px', background: 'var(--color-border-subtle)', pointerEvents: 'none',
+                      }} />
+                    ))}
+
+                    {/* Today marker */}
+                    {todayPct !== null && (
+                      <div style={{
+                        position: 'absolute', left: `${todayPct}%`, top: 0, bottom: 0,
+                        width: '2px', background: 'var(--color-accent)', opacity: 0.6,
+                        pointerEvents: 'none',
+                      }} />
+                    )}
+
+                    {/* Points */}
+                    {points.map((p) => {
+                      const r       = getRating(p.playthrough_id);
+                      const cy      = ratingToY(r);
+                      const isDrag  = draggingId === p.playthrough_id;
+                      const nearest = nearestSatisfaction(r);
+                      const thumb   = p.cover_url ? p.cover_url.replace('t_cover_big', 't_thumb') : null;
+                      const arrowStyle = {
+                        position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+                        fontSize: '9px', lineHeight: 1, color: 'var(--color-accent)',
+                        pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.45)',
+                      };
+                      return (
+                        <Tooltip key={p.playthrough_id} label={`${p.game_title} — ${nearest.label}`} hasArrow placement="top" openDelay={200} isDisabled={isDrag}>
+                          <div
+                            onMouseDown={(e) => onCircleMouseDown(e, p)}
+                            style={{
+                              position: 'absolute',
+                              left: `${p.x}%`, top: `${cy}px`,
+                              transform: 'translate(-50%, -50%)',
+                              width: `${RATING_CIRCLE}px`, height: `${RATING_CIRCLE}px`,
+                              cursor: isDrag ? 'grabbing' : 'grab',
+                              zIndex: isDrag ? 30 : 5,
+                              userSelect: 'none',
+                            }}
+                          >
+                            {/* Up/down hint shown only while dragging (vertical-only) */}
+                            {isDrag && <span style={{ ...arrowStyle, top: '-13px' }}>▲</span>}
+                            {isDrag && <span style={{ ...arrowStyle, bottom: '-13px' }}>▼</span>}
+
+                            {/* Round cover (no border) */}
+                            <div style={{
+                              width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                              background: 'var(--color-bg-surface)',
+                              boxShadow: isDrag ? '0 2px 10px rgba(0,0,0,0.4)' : '0 1px 3px rgba(0,0,0,0.25)',
+                            }}>
+                              {thumb ? (
+                                <img
+                                  src={thumb}
+                                  alt=""
+                                  draggable={false}
+                                  style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                                />
+                              ) : (
+                                <div style={{
+                                  width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)',
+                                }}>{p.game_title?.charAt(0) || '?'}</div>
+                              )}
+                            </div>
+                          </div>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </Box>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CalendarPage() {
   const { user } = useAuth();
@@ -1105,6 +1480,11 @@ export default function CalendarPage() {
 
   const [ganttSortKey, setGanttSortKey] = useState('date');
   const [ganttSortDir, setGanttSortDir] = useState('desc');
+
+  // Shared zoom/scroll for the Gantt + Personal Rating charts.
+  const chartViewport = useChartViewport();
+  // Reset zoom/scroll when the visible time range changes.
+  useEffect(() => { chartViewport.reset(); }, [preset, statsYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleGanttSort = (key) => {
     if (ganttSortKey === key) {
@@ -1303,7 +1683,19 @@ export default function CalendarPage() {
                 onGameClick={handleGameClick}
                 sortKey={ganttSortKey}
                 sortDir={ganttSortDir}
+                viewport={chartViewport}
               />
+
+              {/* ── Personal Rating graph (shares the gantt's range) ── */}
+              <Box mt={4}>
+                <PersonalRatingPanel
+                  sessions={sessions}
+                  rangeStart={range.start}
+                  rangeEnd={range.end}
+                  onOpenGame={openGame}
+                  viewport={chartViewport}
+                />
+              </Box>
             </>
           )}
 

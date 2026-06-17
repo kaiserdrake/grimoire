@@ -13,6 +13,14 @@ import { isAuthenticated, isAdmin } from './auth.js';
 
 dotenv.config();
 
+// Personal satisfaction rating: continuous float clamped to [1, 5].
+// Returns the clamped number, or null if the input is not a finite number.
+const clampRating = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(5, Math.max(1, n));
+};
+
 const formatBytes = (bytes) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -741,13 +749,16 @@ app.get('/api/games/:id/playthroughs', isAuthenticated, async (req, res) => {
 
 app.post('/api/games/:id/playthroughs', isAuthenticated, async (req, res) => {
   const { id } = req.params;
-  const { platform, status, label } = req.body;
+  const { platform, status, label, rating } = req.body;
   const userId = req.user.id;
   if (!platform) return res.status(400).json({ message: 'Platform is required.' });
   const ptStatus = status || 'pend';
   if (!['playing', 'completed', 'pend', 'dropped'].includes(ptStatus)) {
     return res.status(400).json({ message: 'Invalid status.' });
   }
+  // Personal satisfaction rating: continuous 1.0–5.0; defaults to 2.0 (Okay) when omitted.
+  const ptRating = rating === undefined ? 2.0 : clampRating(rating);
+  if (ptRating === null) return res.status(400).json({ message: 'Invalid rating.' });
   try {
     const gameCheck = await query('SELECT id FROM games WHERE id=$1 AND user_id=$2', [id, userId]);
     if (gameCheck.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
@@ -755,8 +766,8 @@ app.post('/api/games/:id/playthroughs', isAuthenticated, async (req, res) => {
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [id]);
 
     const result = await query(
-      'INSERT INTO playthroughs (game_id, user_id, platform, status, label) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [id, userId, platform, ptStatus, label || null]
+      'INSERT INTO playthroughs (game_id, user_id, platform, status, label, rating) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [id, userId, platform, ptStatus, label || null, ptRating]
     );
     res.status(201).json({ ...result.rows[0], sessions: [] });
   } catch (err) {
@@ -767,10 +778,15 @@ app.post('/api/games/:id/playthroughs', isAuthenticated, async (req, res) => {
 
 app.patch('/api/playthroughs/:ptId', isAuthenticated, async (req, res) => {
   const { ptId } = req.params;
-  const { platform, status, label } = req.body;
+  const { platform, status, label, rating } = req.body;
   const userId = req.user.id;
   if (status && !['playing', 'completed', 'pend', 'dropped'].includes(status)) {
     return res.status(400).json({ message: 'Invalid status.' });
+  }
+  let ptRating;
+  if (rating !== undefined) {
+    ptRating = clampRating(rating);
+    if (ptRating === null) return res.status(400).json({ message: 'Invalid rating.' });
   }
   try {
     const existing = await query('SELECT * FROM playthroughs WHERE id=$1 AND user_id=$2', [ptId, userId]);
@@ -778,8 +794,8 @@ app.patch('/api/playthroughs/:ptId', isAuthenticated, async (req, res) => {
 
     const pt = existing.rows[0];
     const result = await query(
-      'UPDATE playthroughs SET platform=$1, status=$2, label=$3, updated_at=NOW() WHERE id=$4 RETURNING *',
-      [platform ?? pt.platform, status ?? pt.status, label !== undefined ? label : pt.label, ptId]
+      'UPDATE playthroughs SET platform=$1, status=$2, label=$3, rating=$4, updated_at=NOW() WHERE id=$5 RETURNING *',
+      [platform ?? pt.platform, status ?? pt.status, label !== undefined ? label : pt.label, ptRating ?? pt.rating, ptId]
     );
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [pt.game_id]);
     res.json(result.rows[0]);
@@ -930,7 +946,7 @@ app.get('/api/calendar/sessions', isAuthenticated, async (req, res) => {
   try {
     const result = await query(
       `SELECT s.id, s.playthrough_id, s.start_date, s.end_date, s.status,
-              p.platform, p.game_id,
+              p.platform, p.game_id, p.rating,
               g.title AS game_title, g.cover_url, g.releases AS game_releases
        FROM playthrough_sessions s
        JOIN playthroughs p ON p.id = s.playthrough_id
@@ -1618,6 +1634,7 @@ async function runMigrations() {
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS aggregated_rating NUMERIC(5,2)`);
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS remarks TEXT`);
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS wishlist_remarks TEXT`);
+  await query(`ALTER TABLE playthroughs ADD COLUMN IF NOT EXISTS rating REAL NOT NULL DEFAULT 2.0`);
 }
 
 runMigrations()
