@@ -842,7 +842,7 @@ function StatsPanel({ sessions, games, onOpenGame }) {
         userSelect="none"
       >
         <HStack spacing={3}>
-          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">📊 Statistics</Text>
+          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">📊 All-time Statistics</Text>
           <HStack spacing={1.5}>
             <Text fontSize="xs" color="var(--color-text-muted)">{totalGames} games</Text>
             <Text fontSize="xs" color="var(--color-text-muted)">·</Text>
@@ -918,32 +918,43 @@ function StatsPanel({ sessions, games, onOpenGame }) {
   );
 }
 
-// ── This Year Panel ───────────────────────────────────────────────────────────
+// ── Range Stats Panel ───────────────────────────────────────────────────────
+// Statistics that follow the time-range selected for the Gantt chart below.
+// A session is counted if it overlaps the selected range (same rule the Gantt uses).
 
-function ThisYearPanel({ sessions, games }) {
+function sessionOverlapsRange(s, rangeStart, rangeEnd) {
+  const start = parseDate(s.start_date);
+  if (!start) return false;
+  const end = s.end_date ? parseDate(s.end_date) : new Date();
+  return end >= rangeStart && start <= rangeEnd;
+}
+
+function RangeStatsPanel({ sessions, games, rangeStart, rangeEnd, title }) {
   const [open, setOpen] = useState(false);
-  const currentYear = new Date().getFullYear();
+  const rangeSessions = sessions.filter(s => sessionOverlapsRange(s, rangeStart, rangeEnd));
+  const rangeGameIds  = new Set(rangeSessions.map(s => s.game_id));
 
-  const yearSessions = sessions.filter(s => s.start_date?.startsWith(String(currentYear)));
-  const yearGameIds  = new Set(yearSessions.map(s => s.game_id));
+  const gamesPlayedCount  = rangeGameIds.size;
+  const playthroughsCount = rangeSessions.length;
+  const completedCount    = rangeSessions.filter(s => s.status === 'completed').length;
 
-  const gamesPlayedCount  = yearGameIds.size;
-  const playthroughsCount = yearSessions.length;
-  const completedCount    = yearSessions.filter(s => s.status === 'completed').length;
-
+  // "New to Me": games whose first-ever session start falls inside the selected range.
   const newGamesCount = (() => {
-    const firstYear = {};
+    const firstStart = {};
     for (const s of sessions) {
-      const yr = s.start_date?.slice(0, 4);
-      if (!yr) continue;
-      if (!firstYear[s.game_id] || yr < firstYear[s.game_id]) firstYear[s.game_id] = yr;
+      const start = parseDate(s.start_date);
+      if (!start) continue;
+      if (!firstStart[s.game_id] || start < firstStart[s.game_id]) firstStart[s.game_id] = start;
     }
-    return [...yearGameIds].filter(id => firstYear[id] === String(currentYear)).length;
+    return [...rangeGameIds].filter(id => {
+      const fs = firstStart[id];
+      return fs && fs >= rangeStart && fs <= rangeEnd;
+    }).length;
   })();
 
   const gamesData = (() => {
     const counts = {};
-    for (const s of yearSessions) counts[s.game_title] = (counts[s.game_title] || 0) + 1;
+    for (const s of rangeSessions) counts[s.game_title] = (counts[s.game_title] || 0) + 1;
     const entries = Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
     if (entries.length > 10) {
       const othersVal = entries.slice(9).reduce((s, d) => s + d.value, 0);
@@ -955,7 +966,7 @@ function ThisYearPanel({ sessions, games }) {
   const genreData = (() => {
     const counts = {};
     for (const g of games) {
-      if (!yearGameIds.has(g.id)) continue;
+      if (!rangeGameIds.has(g.id)) continue;
       const genres = g.genres || [];
       if (genres.length === 0) counts['Unknown'] = (counts['Unknown'] || 0) + 1;
       for (const genre of genres) counts[genre] = (counts[genre] || 0) + 1;
@@ -965,7 +976,7 @@ function ThisYearPanel({ sessions, games }) {
 
   const platformData = (() => {
     const counts = {};
-    for (const s of yearSessions) {
+    for (const s of rangeSessions) {
       const p = s.platform || 'Unknown';
       counts[p] = (counts[p] || 0) + 1;
     }
@@ -974,7 +985,7 @@ function ThisYearPanel({ sessions, games }) {
 
   const statusData = (() => {
     const counts = {};
-    for (const s of yearSessions) {
+    for (const s of rangeSessions) {
       const label = s.status === 'pend' ? 'Pended'
         : s.status ? s.status.charAt(0).toUpperCase() + s.status.slice(1)
         : 'Unknown';
@@ -995,7 +1006,7 @@ function ThisYearPanel({ sessions, games }) {
         userSelect="none"
       >
         <HStack spacing={3}>
-          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">📆 This Year ({currentYear})</Text>
+          <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)">📆 {title}</Text>
           <HStack spacing={1.5}>
             <Text fontSize="xs" color="var(--color-text-muted)">{gamesPlayedCount} games</Text>
             <Text fontSize="xs" color="var(--color-text-muted)">·</Text>
@@ -1011,32 +1022,42 @@ function ThisYearPanel({ sessions, games }) {
       </HStack>
 
       {open && (
-        <Box px={3} py={3} bg="var(--color-bg-surface)">
-          <HStack spacing={5} mb={4} flexWrap="wrap">
-            {[
-              { label: 'Games Played', value: gamesPlayedCount },
-              { label: 'Playthroughs', value: playthroughsCount },
-              { label: 'Completed',    value: completedCount },
-              { label: 'New to Me',    value: newGamesCount },
-            ].map(stat => (
-              <Box key={stat.label}>
-                <Text fontSize="md" fontWeight="800" color="var(--color-accent)" lineHeight="1.1">{stat.value}</Text>
-                <Text fontSize="xs" color="var(--color-text-muted)">{stat.label}</Text>
-              </Box>
-            ))}
-          </HStack>
+      <Box px={3} py={3} bg="var(--color-bg-surface)">
+        <HStack spacing={5} mb={4} flexWrap="wrap">
+          {[
+            { label: 'Games Played', value: gamesPlayedCount },
+            { label: 'Playthroughs', value: playthroughsCount },
+            { label: 'Completed',    value: completedCount },
+            { label: 'New to Me',    value: newGamesCount },
+          ].map(stat => (
+            <Box key={stat.label}>
+              <Text fontSize="md" fontWeight="800" color="var(--color-accent)" lineHeight="1.1">{stat.value}</Text>
+              <Text fontSize="xs" color="var(--color-text-muted)">{stat.label}</Text>
+            </Box>
+          ))}
+        </HStack>
 
-          <Box display="grid" gridTemplateColumns={{ base: '1fr 1fr', xl: '1fr 1fr 1fr 1fr' }} gap={4} mb={5}>
-            <PieChart data={gamesData}    title="🎮 Games Played" />
-            <PieChart data={genreData}    title="🎭 Genres Played" />
-            <PieChart data={platformData} title="🖥️ Platforms" />
-            <PieChart data={statusData}   title="📋 Status Breakdown" />
-          </Box>
-
+        <Box display="grid" gridTemplateColumns={{ base: '1fr 1fr', xl: '1fr 1fr 1fr 1fr' }} gap={4} mb={5}>
+          <PieChart data={gamesData}    title="🎮 Games Played" />
+          <PieChart data={genreData}    title="🎭 Genres Played" />
+          <PieChart data={platformData} title="🖥️ Platforms" />
+          <PieChart data={statusData}   title="📋 Status Breakdown" />
         </Box>
+      </Box>
       )}
     </Box>
   );
+}
+
+// Human-readable title for the selected range preset.
+function rangeStatsTitle(preset, statsYear) {
+  switch (preset) {
+    case '3m':   return 'Last 3 Months';
+    case '6m':   return 'Last 6 Months';
+    case 'year': return `Year by Year (${statsYear})`;
+    case 'all':  return 'All Time';
+    default:     return 'Selected Range';
+  }
 }
 
 // ── Range presets ─────────────────────────────────────────────────────────────
@@ -1078,6 +1099,10 @@ export default function CalendarPage() {
   const preset    = calendarState.preset;
   const setPreset = (val) => setCalendarState((s) => ({ ...s, preset: val }));
 
+  // Selected year for the "Year by year" preset (defaults to the current year).
+  const currentYear = today.getFullYear();
+  const [statsYear, setStatsYear] = useState(currentYear);
+
   const [ganttSortKey, setGanttSortKey] = useState('date');
   const [ganttSortDir, setGanttSortDir] = useState('desc');
 
@@ -1118,6 +1143,9 @@ export default function CalendarPage() {
       const maxDate   = new Date(Math.max(...allEnds.map(d => d.getTime())));
       return { start: startOfMonth(minDate), end: endOfMonth(maxDate) };
     }
+    if (preset === 'year') {
+      return { start: new Date(statsYear, 0, 1), end: new Date(statsYear, 11, 31) };
+    }
     return getRangeForPreset(preset, today);
   })();
 
@@ -1140,7 +1168,7 @@ export default function CalendarPage() {
   const PRESETS = [
     { key: '3m',   label: '3 months' },
     { key: '6m',   label: '6 months' },
-    { key: 'year', label: 'This year' },
+    { key: 'year', label: 'Year by year' },
     { key: 'all',  label: 'All time'  },
   ];
 
@@ -1158,7 +1186,6 @@ export default function CalendarPage() {
           ) : (
             <>
               <StatsPanel sessions={sessions} games={games} onOpenGame={openGame} />
-              <ThisYearPanel sessions={sessions} games={games} />
 
               {/* ── Toolbar ── */}
               <HStack mb={4} justify="space-between" align="center" flexWrap="wrap" gap={2}>
@@ -1183,6 +1210,41 @@ export default function CalendarPage() {
                       {p.label}
                     </Button>
                   ))}
+
+                  {/* Year navigation — only for the "Year by year" preset */}
+                  {preset === 'year' && (
+                    <HStack spacing={0.5} ml={1}>
+                      <Tooltip label="Previous year" hasArrow placement="bottom" openDelay={400}>
+                        <Button
+                          size="xs" variant="outline"
+                          borderColor="var(--color-border)"
+                          color="var(--color-text-secondary)"
+                          _hover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+                          onClick={() => setStatsYear((y) => y - 1)}
+                          aria-label="Previous year"
+                        >
+                          <ArrowBackIcon boxSize={3} />
+                        </Button>
+                      </Tooltip>
+                      <Text fontSize="xs" fontWeight="700" color="var(--color-text-primary)" minW="34px" textAlign="center">
+                        {statsYear}
+                      </Text>
+                      <Tooltip label="Next year" hasArrow placement="bottom" openDelay={400}>
+                        <Button
+                          size="xs" variant="outline"
+                          borderColor="var(--color-border)"
+                          color="var(--color-text-secondary)"
+                          _hover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+                          isDisabled={statsYear >= currentYear}
+                          onClick={() => setStatsYear((y) => Math.min(currentYear, y + 1))}
+                          aria-label="Next year"
+                        >
+                          <ArrowForwardIcon boxSize={3} />
+                        </Button>
+                      </Tooltip>
+                    </HStack>
+                  )}
+
                   <Box w="1px" h="20px" bg="var(--color-border)" mx={1} flexShrink={0} />
                   <Tooltip label={`Sort by game release date (${ganttSortKey === 'date' ? ganttSortDir : 'asc'})`} hasArrow placement="bottom" openDelay={400}>
                     <Button
@@ -1211,6 +1273,15 @@ export default function CalendarPage() {
                 </HStack>
               </HStack>
 
+              {/* ── Range-following statistics (tracks the preset above) ── */}
+              <RangeStatsPanel
+                sessions={sessions}
+                games={games}
+                rangeStart={range.start}
+                rangeEnd={range.end}
+                title={rangeStatsTitle(preset, statsYear)}
+              />
+
               {/* ── Status legend ── */}
               <HStack mb={4} spacing={3} flexWrap="wrap">
                 {Object.entries(STATUS_COLORS).map(([status, col]) => (
@@ -1224,7 +1295,7 @@ export default function CalendarPage() {
               </HStack>
 
               <GanttChart
-                key={preset}
+                key={preset === 'year' ? `year-${statsYear}` : preset}
                 sessions={sessions}
                 rangeStart={range.start}
                 rangeEnd={range.end}
