@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useFocus } from '@/context/FocusContext';
 import { api } from '@/utils/api';
 import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
+import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -429,7 +430,7 @@ function BulletinReadModal({ post, loading, onClose }) {
 
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
+              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkSearchableTablePlugin()]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (

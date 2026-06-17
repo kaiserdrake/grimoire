@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -27,6 +27,8 @@ import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
 import { makeRemarkNoteIconPlugin, buildIconMap, iconToken } from '@/utils/noteIcons';
+import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
+import SearchableTable from '@/components/SearchableTable';
 
 // ── Markdown editor helpers ───────────────────────────────────────────────────
 function insertAtCursor(textarea, before, after = '', placeholder = '') {
@@ -383,6 +385,11 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
     null,
     { icon: <FiGrid size={12} />,   label: 'Insert table', action: () => apply(
       '\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| ',
+      ' | cell | cell |\n',
+      'cell'
+    )},
+    { icon: <FiSearch size={12} />, label: 'Insert searchable table', action: () => apply(
+      '\n| Column 1 :search | Column 2 | Column 3 |\n| --- | --- | --- |\n| ',
       ' | cell | cell |\n',
       'cell'
     )},
@@ -1049,12 +1056,13 @@ export default function NotesPage({ params }) {
                 <div ref={previewRef} className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
                   {content.trim()
                     ? <ReactMarkdown
-                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap)]}
+                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()]}
                         rehypePlugins={[rehypeRaw, rehypeSourceLine]}
                         components={{
                           img: ({ node, ...props }) => (
                             <div className="img-resizer"><img {...props} /></div>
                           ),
+                          table: ({ node, ...props }) => <SearchableTable {...props} />,
                         }}
                       >{content}</ReactMarkdown>
                     : <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>

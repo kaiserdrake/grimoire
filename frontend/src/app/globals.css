@@ -258,6 +258,10 @@ body {
   flex-shrink: 0;
 }
 
+.game-tab-right {
+  margin-left: auto;
+}
+
 .game-tab-btn {
   display: flex;
   align-items: center;
@@ -597,6 +601,26 @@ tr.notes-preview-line-active th:first-child {
 .notes-preview-content th,
 .notes-preview-content td { border: 1px solid var(--color-border); padding: 0.35em 0.6em; text-align: left; font-size: 0.85em; white-space: nowrap; }
 .notes-preview-content th { background: var(--color-bg-subtle); font-weight: 600; }
+
+/* Searchable tables: filter box above tables marked with :search */
+.md-table-wrap { margin: 0.75em 0; width: max-content; max-width: 100%; }
+.md-table-wrap table { margin: 0.35em 0 0; }
+.md-table-search-wrap { position: relative; display: flex; align-items: center; max-width: 280px; }
+.md-table-search-wrap .md-table-search-icon {
+  position: absolute; left: 0.5em; color: var(--color-text-muted); pointer-events: none;
+}
+.md-table-search {
+  width: 100%;
+  padding: 0.3em 0.6em 0.3em 1.9em;
+  font-size: 0.8em;
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.md-table-search:focus { border-color: var(--color-accent); }
+.md-table-search::placeholder { color: var(--color-text-muted); }
 
 /* Resizable images in notes preview */
 .notes-preview-content img:not(.gp-img):not(.note-icon) {
