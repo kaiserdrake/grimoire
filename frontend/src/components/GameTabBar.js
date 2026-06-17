@@ -36,12 +36,13 @@ export default function GameTabBar({ gameId, ptId, hasPlaythroughs = true }) {
             {tab.label}
           </button>
         );
+        const wrapClass = tab.key === 'settings' ? 'game-tab-right' : undefined;
         return tab.disabled ? (
           <Tooltip key={tab.key} label="Add a playthrough first" hasArrow placement="bottom" openDelay={200}>
-            <span>{btn}</span>
+            <span className={wrapClass}>{btn}</span>
           </Tooltip>
         ) : (
-          <span key={tab.key}>{btn}</span>
+          <span key={tab.key} className={wrapClass}>{btn}</span>
         );
       })}
     </div>

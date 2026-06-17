@@ -6,7 +6,7 @@ import {
   Input, Select, Tooltip, useToast,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiX, FiCheck } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiCheck } from 'react-icons/fi';
 import Navbar from '@/components/Navbar';
 import GameTabBar from '@/components/GameTabBar';
 import GameDetailModal from '@/components/GameDetailModal';
@@ -14,7 +14,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { PIN_COLORS, PIN_TYPES, PinIcon } from '@/constants/pins';
-import { slugifyGroup, iconToken } from '@/utils/noteIcons';
+import { slugifyGroup, normalizeIcon, resolveGroupCodes } from '@/utils/noteIcons';
 
 // ── Section wrapper ────────────────────────────────────────────────────────────
 function Section({ icon: Icon, title, description, children }) {
@@ -105,7 +105,11 @@ export default function GameSettingsPage({ params }) {
         setGame(g);
         setPlaythroughs(pts);
         setMapDefaults(Array.isArray(mapDef) ? mapDef : []);
-        setIconGroups(Array.isArray(iconDef) ? iconDef : []);
+        // Normalize stored icons (legacy bare URL strings → { url, name, code }).
+        setIconGroups((Array.isArray(iconDef) ? iconDef : []).map(g => ({
+          name: g.name,
+          icons: (g.icons || []).map((ic, i) => normalizeIcon(ic, i)),
+        })));
       } catch (err) {
         toast({ title: 'Failed to load settings', description: err.message, status: 'error', duration: 4000 });
       } finally {
@@ -126,7 +130,18 @@ export default function GameSettingsPage({ params }) {
           .map(d => ({ icon: d.icon, color: d.color, label: (d.label || '').trim() }))
           .filter(d => d.label);
         const cleanedGroups = iconGroups
-          .map(g => ({ name: slugifyGroup(g.name), icons: g.icons || [] }))
+          .map(g => {
+            const valid = (g.icons || []).filter(ic => ic.url);
+            const codes = resolveGroupCodes(valid); // auto-suffix duplicate codes
+            return {
+              name: slugifyGroup(g.name),
+              icons: valid.map((ic, i) => ({
+                url: ic.url,
+                name: (ic.name || '').trim(),
+                code: codes[i],
+              })),
+            };
+          })
           .filter(g => g.name);
         await Promise.all([
           api.settings.set(`map_defaults_${id}`, cleanedDefaults),
@@ -159,6 +174,11 @@ export default function GameSettingsPage({ params }) {
   const removeIcon = (gIdx, iIdx) =>
     setIconGroups(prev => prev.map((g, i) =>
       i === gIdx ? { ...g, icons: g.icons.filter((_, j) => j !== iIdx) } : g));
+  const updateIcon = (gIdx, iIdx, patch) =>
+    setIconGroups(prev => prev.map((g, i) =>
+      i === gIdx
+        ? { ...g, icons: g.icons.map((ic, j) => (j === iIdx ? { ...ic, ...patch } : ic)) }
+        : g));
 
   const openUrlModal = (idx) => { setUrlModalIdx(idx); setUrlInput(''); };
 
@@ -169,8 +189,11 @@ export default function GameSettingsPage({ params }) {
     setAddingUrl(true);
     try {
       const att = await api.attachments.fromUrl(id, 'icons', url);
-      setIconGroups(prev => prev.map((g, i) =>
-        i === idx ? { ...g, icons: [...(g.icons || []), att.url] } : g));
+      setIconGroups(prev => prev.map((g, i) => {
+        if (i !== idx) return g;
+        const icons = g.icons || [];
+        return { ...g, icons: [...icons, { url: att.url, name: '', code: String(icons.length + 1).padStart(2, '0') }] };
+      }));
       setUrlModalIdx(null);
       setUrlInput('');
     } catch (err) {
@@ -224,7 +247,7 @@ export default function GameSettingsPage({ params }) {
           <Section
             icon={FiTag}
             title="Note Icons"
-            description="Create icon groups and add icons by URL. Reference them in notes with the toolbar tag button or by typing :icon[group_01]."
+            description="Create icon groups and add icons by URL. Give each icon a Name (shown as a tooltip on hover) and a Code (the suffix after the group name). Reference an icon in notes by typing :icon[group_code] or via the toolbar tag button."
           >
             {iconGroups.length === 0 ? (
               <Text fontSize="xs" mb={2} style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
@@ -234,6 +257,7 @@ export default function GameSettingsPage({ params }) {
               <VStack spacing={2} align="stretch" mb={2}>
                 {iconGroups.map((g, gIdx) => {
                   const slug = slugifyGroup(g.name) || 'group';
+                  const resolvedCodes = resolveGroupCodes(g.icons);
                   return (
                     <Box key={gIdx} style={{ border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0.6rem' }}>
                       <HStack spacing={2} mb={2}>
@@ -245,7 +269,7 @@ export default function GameSettingsPage({ params }) {
                           style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', maxWidth: '180px' }}
                         />
                         <Text fontSize="10px" style={{ color: 'var(--color-text-muted)' }}>
-                          → :icon[{slug}_01]
+                          → :icon[{slug}_&lt;code&gt;]
                         </Text>
                         <Box flex={1} />
                         <Tooltip label="Remove group" hasArrow placement="top" openDelay={300}>
@@ -260,72 +284,76 @@ export default function GameSettingsPage({ params }) {
                         </Tooltip>
                       </HStack>
 
-                      <Flex wrap="wrap" gap={2} align="flex-start">
-                        {(g.icons || []).map((url, iIdx) => (
-                          <Box key={iIdx} style={{ width: '64px', textAlign: 'center', position: 'relative' }}>
-                            <Box
-                              style={{
-                                position: 'relative',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                height: '48px',
-                                background: 'var(--color-bg-page)',
-                                border: '1px solid var(--color-border-subtle)',
-                                borderRadius: 'var(--radius-sm)',
-                              }}
-                            >
-                              <Box style={{
-                                position: 'absolute', top: '-6px', left: '-6px',
-                                width: '16px', height: '16px', borderRadius: '50%',
-                                background: 'var(--color-accent)', color: 'white',
-                                fontSize: '9px', fontWeight: 700,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}>
-                                {iIdx + 1}
-                              </Box>
-                              <img
-                                src={url.startsWith('http') ? url : `${apiBase}${url}`}
-                                alt={iconToken(g.name, iIdx + 1)}
-                                style={{ maxHeight: '38px', maxWidth: '54px', objectFit: 'contain' }}
-                              />
-                              <Box
-                                as="button"
-                                onClick={() => removeIcon(gIdx, iIdx)}
-                                title="Remove icon"
-                                style={{
-                                  position: 'absolute', top: '-6px', right: '-6px',
-                                  width: '16px', height: '16px', borderRadius: '50%',
-                                  background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
-                                  color: 'var(--color-text-muted)', cursor: 'pointer',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}
-                              >
-                                <FiX size={9} />
-                              </Box>
-                            </Box>
-                            <Text fontSize="9px" mt={0.5} noOfLines={1} style={{ color: 'var(--color-text-muted)' }}>
-                              {slug}_{String(iIdx + 1).padStart(2, '0')}
-                            </Text>
-                          </Box>
-                        ))}
+                      {(g.icons || []).length > 0 && (
+                        <VStack spacing={1.5} align="stretch" mb={2}>
+                          {/* Header row */}
+                          <HStack spacing={2} px={1} style={{ color: 'var(--color-text-muted)' }}>
+                            <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '44px' }}>Icon</Text>
+                            <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" flex={1}>Name</Text>
+                            <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '160px' }}>Code</Text>
+                            <Box style={{ width: '24px' }} />
+                          </HStack>
 
-                        {/* Add icon from URL */}
-                        <Box
-                          as="button"
-                          onClick={() => openUrlModal(gIdx)}
-                          style={{
-                            width: '64px', height: '48px',
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            gap: '2px',
-                            background: 'var(--color-bg-subtle)',
-                            border: '1px dashed var(--color-border)',
-                            borderRadius: 'var(--radius-sm)',
-                            color: 'var(--color-text-muted)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <FiLink size={13} /><Text fontSize="9px">Add URL</Text>
-                        </Box>
-                      </Flex>
+                          {(g.icons || []).map((ic, iIdx) => {
+                            const token = `${slug}_${resolvedCodes[iIdx]}`;
+                            return (
+                              <HStack key={iIdx} spacing={2} align="flex-start">
+                                <Box style={{
+                                  width: '44px', height: '40px', flexShrink: 0,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  background: 'var(--color-bg-page)',
+                                  border: '1px solid var(--color-border-subtle)',
+                                  borderRadius: 'var(--radius-sm)',
+                                }}>
+                                  <img
+                                    src={ic.url.startsWith('http') ? ic.url : `${apiBase}${ic.url}`}
+                                    alt={ic.name || token}
+                                    style={{ maxHeight: '32px', maxWidth: '38px', objectFit: 'contain' }}
+                                  />
+                                </Box>
+                                <Input
+                                  size="xs" flex={1}
+                                  value={ic.name}
+                                  onChange={e => updateIcon(gIdx, iIdx, { name: e.target.value })}
+                                  placeholder="Tooltip name"
+                                  style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                                />
+                                <Box style={{ width: '160px' }}>
+                                  <Input
+                                    size="xs"
+                                    value={ic.code}
+                                    onChange={e => updateIcon(gIdx, iIdx, { code: e.target.value })}
+                                    placeholder="code"
+                                    style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                                  />
+                                  <Text fontSize="9px" mt={0.5} noOfLines={1} style={{ color: 'var(--color-text-muted)' }}>
+                                    :icon[{token}]
+                                  </Text>
+                                </Box>
+                                <Tooltip label="Remove icon" hasArrow placement="top" openDelay={300}>
+                                  <IconButton
+                                    icon={<FiTrash2 size={12} />}
+                                    size="xs" variant="ghost"
+                                    aria-label="Remove icon"
+                                    onClick={() => removeIcon(gIdx, iIdx)}
+                                    style={{ color: 'var(--color-text-muted)', minWidth: '24px' }}
+                                  />
+                                </Tooltip>
+                              </HStack>
+                            );
+                          })}
+                        </VStack>
+                      )}
+
+                      <Button
+                        size="xs"
+                        leftIcon={<FiLink size={12} />}
+                        onClick={() => openUrlModal(gIdx)}
+                        variant="ghost"
+                        style={{ color: 'var(--color-text-secondary)', border: '1px dashed var(--color-border)' }}
+                      >
+                        Add icon URL
+                      </Button>
                     </Box>
                   );
                 })}
