@@ -113,7 +113,11 @@ export default function TierList({ raw, iconMap = {}, headings = [], position, o
       onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ fromLabel: label, fromIdx: idx }))}
     >
       {item.icon && (iconMap[item.icon]
-        ? <img className="note-icon" src={iconMap[item.icon]} alt={item.icon} draggable="false" />
+        ? (iconMap[item.icon].name
+            ? <span className="note-icon-tip" data-tip={iconMap[item.icon].name}>
+                <img className="note-icon" src={iconMap[item.icon].src} alt={iconMap[item.icon].name} draggable="false" />
+              </span>
+            : <img className="note-icon" src={iconMap[item.icon].src} alt={item.icon} draggable="false" />)
         : <span className="note-icon-missing">{item.icon}?</span>)}
       {item.text && (item.slug
         ? <a className="tier-item-link" onClick={() => onNavigateSection?.(item.slug)}>{item.text}</a>
@@ -207,14 +211,14 @@ function CardEditor({ initial, iconMap, headings, onSave, onDelete, onClose }) {
         <>
           <label className="tier-card-field-label">Icon</label>
           <div className="tier-card-icons">
-            {iconEntries.map(([token, url]) => (
+            {iconEntries.map(([token, entry]) => (
               <button
                 key={token}
                 className={`tier-card-icon${icon === token ? ' selected' : ''}`}
-                title={token}
+                title={entry.name ? `${entry.name} (${token})` : token}
                 onClick={() => setIcon(icon === token ? null : token)}
               >
-                <img src={url} alt={token} draggable="false" />
+                <img src={entry.src} alt={entry.name || token} draggable="false" />
               </button>
             ))}
           </div>

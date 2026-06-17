@@ -745,6 +745,38 @@ tr.notes-preview-line-active th:first-child {
   background: var(--color-bg-subtle);
 }
 
+/* Custom hover tooltip for note icons — glass container matching the map
+   statistics popover, bold text, short reveal delay. */
+.note-icon-tip { position: relative; display: inline-flex; vertical-align: middle; }
+.note-icon-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%; left: 50%;
+  transform: translateX(-50%) translateY(-5px);
+  background: rgba(15, 15, 20, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  padding: 4px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  transition-delay: 0s;
+  z-index: 60;
+}
+.note-icon-tip:hover::after {
+  opacity: 1;
+  transition-delay: 0.1s;
+}
+
 /* ── Tier list (tiermaker) ─────────────────────────────────────────────────── */
 .tier-list { display: flex; flex-direction: column; gap: 3px; margin: 0.75em 0; }
 .tier-row { display: flex; align-items: stretch; gap: 3px; }

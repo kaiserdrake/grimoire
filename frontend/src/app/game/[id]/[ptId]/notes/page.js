@@ -26,7 +26,7 @@ import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
-import { makeRemarkNoteIconPlugin, buildIconMap, iconToken } from '@/utils/noteIcons';
+import { makeRemarkNoteIconPlugin, buildIconMap, iconTokenFor, normalizeIcon } from '@/utils/noteIcons';
 import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
 import SearchableTable from '@/components/SearchableTable';
 import { slugify, rehypeHeadingIds } from '@/utils/headings';
@@ -123,19 +123,20 @@ function NoteIconPicker({ iconGroups, apiBase, onInsert, onClose }) {
           <div key={g.name}>
             <div className="gp-picker-section">{g.name}</div>
             <div className="gp-picker-row">
-              {g.icons.map((url, i) => {
-                const token = iconToken(g.name, i + 1);
+              {g.icons.map((icon, i) => {
+                const { url, name, code } = normalizeIcon(icon, i);
+                const token = iconTokenFor(g.name, code);
                 return (
-                  <button key={token} className="gp-picker-btn"
+                  <button key={token} className="gp-picker-btn" title={name || token}
                     onMouseDown={(e) => { e.preventDefault(); onInsert(token); }}>
                     <img
                       className="note-icon"
                       src={url.startsWith('http') ? url : `${apiBase}${url}`}
-                      alt={token}
+                      alt={name || token}
                       style={{ height: '26px' }}
                       draggable={false}
                     />
-                    <span className="gp-picker-label">{token}</span>
+                    <span className="gp-picker-label">{name || token}</span>
                   </button>
                 );
               })}
