@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -29,6 +29,8 @@ import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } 
 import { makeRemarkNoteIconPlugin, buildIconMap, iconToken } from '@/utils/noteIcons';
 import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
 import SearchableTable from '@/components/SearchableTable';
+import { slugify, rehypeHeadingIds } from '@/utils/headings';
+import TierList from '@/components/TierList';
 
 // ── Markdown editor helpers ───────────────────────────────────────────────────
 function insertAtCursor(textarea, before, after = '', placeholder = '') {
@@ -392,6 +394,9 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       '\n| Column 1 :search | Column 2 | Column 3 |\n| --- | --- | --- |\n| ',
       ' | cell | cell |\n',
       'cell'
+    )},
+    { icon: <FiLayers size={12} />, label: 'Insert tier list', action: () => apply(
+      '\n```tier\nS: \nA: \nB: \nC: \nD: \nUnranked: \n```\n'
     )},
     null,
     { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
@@ -805,6 +810,28 @@ export default function NotesPage({ params }) {
   const handleManualSave = () => { clearTimeout(saveTimer.current); save(content); };
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
+  // Replace a ```tier block (by its line range) with regenerated body text, then
+  // persist via the normal debounced save. Used by the interactive TierList.
+  const persistTierBlock = (position, body) => {
+    if (!position) return;
+    const lines = content.split('\n');
+    const block = '```tier\n' + body + '\n```';
+    const next = [
+      ...lines.slice(0, position.start.line - 1),
+      block,
+      ...lines.slice(position.end.line),
+    ].join('\n');
+    setContent(next);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => save(next), 2000);
+  };
+
+  // Scroll the preview to a heading id (used by tier-card section links).
+  const navigateSection = (slug) => {
+    const el = previewRef.current?.querySelector('#' + (window.CSS?.escape ? CSS.escape(slug) : slug));
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const handleImageInsert = (markdown) => {
     const ta = textareaRef.current;
     if (ta) {
@@ -1057,12 +1084,30 @@ export default function NotesPage({ params }) {
                   {content.trim()
                     ? <ReactMarkdown
                         remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()]}
-                        rehypePlugins={[rehypeRaw, rehypeSourceLine]}
+                        rehypePlugins={[rehypeRaw, rehypeSourceLine, rehypeHeadingIds]}
                         components={{
                           img: ({ node, ...props }) => (
                             <div className="img-resizer"><img {...props} /></div>
                           ),
                           table: ({ node, ...props }) => <SearchableTable {...props} />,
+                          pre: ({ node, children, ...props }) => {
+                            const codeEl = node?.children?.[0];
+                            const cls = codeEl?.properties?.className;
+                            if (Array.isArray(cls) && cls.includes('language-tier')) {
+                              const raw = (codeEl.children?.[0]?.value || '').replace(/\n$/, '');
+                              return (
+                                <TierList
+                                  raw={raw}
+                                  iconMap={iconMap}
+                                  headings={extractHeadings(content).map(h => ({ ...h, slug: slugify(h.text) }))}
+                                  position={node.position}
+                                  onPersist={persistTierBlock}
+                                  onNavigateSection={navigateSection}
+                                />
+                              );
+                            }
+                            return <pre {...props}>{children}</pre>;
+                          },
                         }}
                       >{content}</ReactMarkdown>
                     : <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>
