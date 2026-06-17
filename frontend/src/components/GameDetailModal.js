@@ -15,6 +15,7 @@ import { useFocus } from '@/context/FocusContext';
 
 import { DEFAULT_PLATFORMS } from '@/constants/platforms';
 import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
+import RatingPopover from '@/components/RatingPopover';
 import { TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon } from '@/constants/tags';
 import { ptDisplayLabel } from '@/utils/playthroughs';
 
@@ -533,6 +534,7 @@ function PlaythroughRow({ pt, allPlaythroughs, gameId, onUpdated, onDeleted }) {
 
         <HStack spacing={1} flexShrink={0} onClick={(e) => e.stopPropagation()}>
           <StatusBadge status={currentStatus} />
+          <RatingPopover pt={pt} onUpdated={onUpdated} />
           <Tooltip label="Notes" hasArrow placement="top" openDelay={400}>
             <IconButton size="xs" variant="ghost" aria-label="Notes" icon={<FiFileText size={11} />}
               color="var(--color-text-muted)" _hover={{ color: 'var(--color-text-primary)' }}

@@ -12,6 +12,16 @@ export const PT_STATUS_COLORS = {
   dropped:   'var(--color-danger)',
 };
 
+// Personal satisfaction scale (low → high). The stored rating is a continuous
+// float in [1, 5]; these are the reference levels used for axis labels/tooltips.
+export const SATISFACTION_SCALE = [
+  { value: 1, label: 'Not good' },
+  { value: 2, label: 'Okay' },
+  { value: 3, label: 'Good' },
+  { value: 4, label: 'Very Good' },
+  { value: 5, label: 'Epic' },
+];
+
 export const PT_STATUS_STYLE = {
   playing:   { color: 'var(--color-status-playing)',   background: 'var(--color-status-bg-playing)' },
   completed: { color: 'var(--color-status-completed)', background: 'var(--color-status-bg-completed)' },

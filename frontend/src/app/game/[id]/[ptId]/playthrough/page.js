@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar';
 import GameTabBar from '@/components/GameTabBar';
 import RecentDrawer from '@/components/RecentDrawer';
 import GameDetailModal from '@/components/GameDetailModal';
+import RatingPopover from '@/components/RatingPopover';
 import { useAuth } from '@/context/AuthContext';
 import { useFocus } from '@/context/FocusContext';
 import { useLastVisited } from '@/context/LastVisitedContext';
@@ -353,6 +354,10 @@ function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
             )}
           </div>
         </div>
+
+        <HStack spacing={1} flexShrink={0} onClick={(e) => e.stopPropagation()}>
+          <RatingPopover pt={pt} />
+        </HStack>
       </HStack>
 
       {/* Sessions table */}

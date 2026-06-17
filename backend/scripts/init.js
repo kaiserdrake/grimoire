@@ -93,6 +93,7 @@ const createTables = async () => {
       platform   TEXT NOT NULL,
       label      TEXT,
       status     playthrough_status NOT NULL DEFAULT 'pend',
+      rating     REAL NOT NULL DEFAULT 2.0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
