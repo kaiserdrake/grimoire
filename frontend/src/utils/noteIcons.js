@@ -118,7 +118,10 @@ export function makeRemarkNoteIconPlugin(iconMap = {}) {
           }
           return;
         }
-        if (node.children) node.children.forEach(child => visitNode(child, node));
+        // Iterate over a snapshot: visiting a text child may splice replacement
+        // nodes into node.children, growing it. A live forEach would skip later
+        // children (e.g. a second :icon[] after a <br> in the same table cell).
+        if (node.children) [...node.children].forEach(child => visitNode(child, node));
       };
       visitNode(tree, null);
     };

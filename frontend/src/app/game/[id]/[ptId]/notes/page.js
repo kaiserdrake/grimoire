@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -668,7 +668,12 @@ export default function NotesPage({ params }) {
   const [saving, setSaving]                 = useState(false);
   const [gameModalOpen, setGameModalOpen]   = useState(false);
   const [helpOpen, setHelpOpen]             = useState(false);
-  const [isPresentMode, setIsPresentMode]   = useState(false);
+  // Locked = render-only (no editor). Persisted per note file across reloads/tab switches.
+  const [lockedFiles, setLockedFiles]       = useState(() => {
+    if (typeof window === 'undefined') return {};
+    try { return JSON.parse(localStorage.getItem('grimoire:notesLocked') || '{}') || {}; }
+    catch { return {}; }
+  });
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -688,6 +693,19 @@ export default function NotesPage({ params }) {
   const setContent      = (val) => setNotesState((s) => ({ ...s, content: val }));
   const setSaved        = (val) => setNotesState((s) => ({ ...s, saved: val }));
 
+  // Lock state is per active note file.
+  const isPresentMode = !!(activeFileId != null && lockedFiles[activeFileId]);
+  const toggleLocked = () => {
+    if (activeFileId == null) return;
+    setLockedFiles((prev) => {
+      const next = { ...prev };
+      if (next[activeFileId]) delete next[activeFileId];
+      else next[activeFileId] = true;
+      try { localStorage.setItem('grimoire:notesLocked', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   const saveTimer   = useRef(null);
   const textareaRef = useRef(null);
   const previewRef  = useRef(null);
@@ -703,6 +721,15 @@ export default function NotesPage({ params }) {
     const line = ta.value.slice(0, ta.selectionStart).split('\n').length;
     setActiveLine(line);
   }, []);
+
+  // In Present mode there's no editor caret, so let a click on the preview move
+  // the row highlight to the clicked block.
+  const handlePreviewClick = useCallback((e) => {
+    if (!isPresentMode) return;
+    const el = e.target.closest?.('[data-source-line]');
+    if (!el) return;
+    setActiveLine(Number(el.getAttribute('data-source-line')));
+  }, [isPresentMode]);
 
   // Highlight the top-level preview block that contains the cursor line.
   useEffect(() => {
@@ -1036,13 +1063,13 @@ export default function NotesPage({ params }) {
                     Pin
                   </Button>
                   <Button size="xs"
-                    leftIcon={isPresentMode ? <FiEdit3 size={11} /> : <FiEye size={11} />}
-                    onClick={() => setIsPresentMode(m => !m)}
+                    leftIcon={isPresentMode ? <FiUnlock size={11} /> : <FiLock size={11} />}
+                    onClick={toggleLocked}
                     style={{
                       background: 'var(--color-bg-subtle)',
                       color: 'var(--color-text-muted)', border: 'none',
                     }}>
-                    {isPresentMode ? 'Edit' : 'Present'}
+                    {isPresentMode ? 'Unlock' : 'Lock'}
                   </Button>
                 </HStack>
               </div>
@@ -1081,7 +1108,9 @@ export default function NotesPage({ params }) {
 
                 {!isPresentMode && <div className="notes-split-divider" />}
 
-                <div ref={previewRef} className="notes-preview-content notes-preview-split" style={{ zoom: `${previewZoom}%` }}>
+                <div ref={previewRef} className="notes-preview-content notes-preview-split"
+                  style={{ zoom: `${previewZoom}%`, cursor: isPresentMode ? 'pointer' : undefined }}
+                  onClick={handlePreviewClick}>
                   {content.trim()
                     ? <ReactMarkdown
                         remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()]}
