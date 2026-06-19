@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Flex, HStack, Text, Button, Spinner, useToast, IconButton, Box, Tooltip,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody,
@@ -766,7 +766,7 @@ export default function NotesPage({ params }) {
       .catch(() => {});
   }, [id, user]);
 
-  const iconMap = buildIconMap(iconGroups, apiBase);
+  const iconMap = useMemo(() => buildIconMap(iconGroups, apiBase), [iconGroups, apiBase]);
 
   useEffect(() => {
     if (!user) return;
@@ -856,7 +856,7 @@ export default function NotesPage({ params }) {
 
   // Replace a ```tier block (by its line range) with regenerated body text, then
   // persist via the normal debounced save. Used by the interactive TierList.
-  const persistTierBlock = (position, body) => {
+  const persistTierBlock = useCallback((position, body) => {
     if (!position) return;
     const lines = content.split('\n');
     const block = '```tier\n' + body + '\n```';
@@ -868,13 +868,13 @@ export default function NotesPage({ params }) {
     setContent(next);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(next), 2000);
-  };
+  }, [content, save]);
 
   // Scroll the preview to a heading id (used by tier-card section links).
-  const navigateSection = (slug) => {
+  const navigateSection = useCallback((slug) => {
     const el = previewRef.current?.querySelector('#' + (window.CSS?.escape ? CSS.escape(slug) : slug));
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
+  }, []);
 
   const handleImageInsert = (markdown) => {
     const ta = textareaRef.current;
@@ -966,6 +966,51 @@ export default function NotesPage({ params }) {
     } catch (err) { toast({ title: 'Rename failed', description: err.message, status: 'error', duration: 3000 }); }
   };
 
+  const activeFile = activeFileId ? Object.values(filesByPt).flat().find(f => f.id === activeFileId) : null;
+  const activePt = playthroughs.find(p => String(p.id) === String(activePtId));
+  const gamepad  = useMemo(() => detectGamepad(activePt?.platform), [activePt?.platform]);
+
+  // Stable plugin/component identities for the markdown preview. Recreating these
+  // inline on every render makes react-markdown remount custom components (e.g.
+  // SearchableTable), which would wipe a table's active filter on every cell click.
+  // These hooks must run before any early return below to satisfy the Rules of Hooks.
+  const remarkPlugins = useMemo(
+    () => [remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()],
+    [gamepad, iconMap],
+  );
+  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds], []);
+  const markdownComponents = useMemo(() => ({
+    img: ({ node, ...props }) => (
+      <div className="img-resizer"><img {...props} /></div>
+    ),
+    table: ({ node, ...props }) => {
+      const idx = ++tableCounterRef.current;
+      // Tables are keyed st1, st2, … by their order on the page. Accept a bare
+      // `st` as a convenience alias for the first table.
+      const fromUrl = searchParams.get(`st${idx}`) ?? (idx === 1 ? searchParams.get('st') : null);
+      const init = props['data-searchable'] ? (fromUrl ?? '') : '';
+      return <SearchableTable tableIndex={idx} initialSearch={init} {...props} />;
+    },
+    pre: ({ node, children, ...props }) => {
+      const codeEl = node?.children?.[0];
+      const cls = codeEl?.properties?.className;
+      if (Array.isArray(cls) && cls.includes('language-tier')) {
+        const raw = (codeEl.children?.[0]?.value || '').replace(/\n$/, '');
+        return (
+          <TierList
+            raw={raw}
+            iconMap={iconMap}
+            headings={extractHeadings(content).map(h => ({ ...h, slug: slugify(h.text) }))}
+            position={node.position}
+            onPersist={persistTierBlock}
+            onNavigateSection={navigateSection}
+          />
+        );
+      }
+      return <pre {...props}>{children}</pre>;
+    },
+  }), [iconMap, searchParams, content, persistTierBlock, navigateSection]);
+
   if (!user) return (
     <>
       <Navbar />
@@ -974,10 +1019,6 @@ export default function NotesPage({ params }) {
       </div>
     </>
   );
-
-  const activeFile = activeFileId ? Object.values(filesByPt).flat().find(f => f.id === activeFileId) : null;
-  const activePt = playthroughs.find(p => String(p.id) === String(activePtId));
-  const gamepad  = detectGamepad(activePt?.platform);
 
   return (
     <>
@@ -1129,36 +1170,9 @@ export default function NotesPage({ params }) {
                   onClick={handlePreviewClick}>
                   {content.trim()
                     ? (tableCounterRef.current = 0, <ReactMarkdown
-                        remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()]}
-                        rehypePlugins={[rehypeRaw, rehypeSourceLine, rehypeHeadingIds]}
-                        components={{
-                          img: ({ node, ...props }) => (
-                            <div className="img-resizer"><img {...props} /></div>
-                          ),
-                          table: ({ node, ...props }) => {
-                          const idx = ++tableCounterRef.current;
-                          const init = props['data-searchable'] ? (searchParams.get(`st${idx}`) ?? '') : '';
-                          return <SearchableTable tableIndex={idx} initialSearch={init} {...props} />;
-                        },
-                          pre: ({ node, children, ...props }) => {
-                            const codeEl = node?.children?.[0];
-                            const cls = codeEl?.properties?.className;
-                            if (Array.isArray(cls) && cls.includes('language-tier')) {
-                              const raw = (codeEl.children?.[0]?.value || '').replace(/\n$/, '');
-                              return (
-                                <TierList
-                                  raw={raw}
-                                  iconMap={iconMap}
-                                  headings={extractHeadings(content).map(h => ({ ...h, slug: slugify(h.text) }))}
-                                  position={node.position}
-                                  onPersist={persistTierBlock}
-                                  onNavigateSection={navigateSection}
-                                />
-                              );
-                            }
-                            return <pre {...props}>{children}</pre>;
-                          },
-                        }}
+                        remarkPlugins={remarkPlugins}
+                        rehypePlugins={rehypePlugins}
+                        components={markdownComponents}
                       >{content}</ReactMarkdown>)
                     : <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>
                   }
