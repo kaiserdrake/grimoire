@@ -342,12 +342,12 @@ app.post('/api/login', async (req, res) => {
     if (!match) return res.status(401).json({ message: 'Invalid credentials.' });
 
     const payload = { id: user.id, email: user.email, role: user.role, name: user.name };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '72h' });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '84h' });
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 72 * 60 * 60 * 1000,
+      maxAge: 84 * 60 * 60 * 1000,
     });
     res.json({ message: 'Login successful.', user: { id: user.id, email: user.email, role: user.role, name: user.name } });
   } catch (err) {
