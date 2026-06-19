@@ -21,7 +21,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import GameTabBar from '@/components/GameTabBar';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLastVisited } from '@/context/LastVisitedContext';
 import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -656,6 +656,10 @@ export default function NotesPage({ params }) {
   const { user } = useAuth();
   const { visitNotes } = useLastVisited();
   const { notesState, setNotesState } = useTabState();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Incremented each render pass to assign 1-based index to each SearchableTable
+  const tableCounterRef = useRef(0);
 
   const [game, setGame]                     = useState(null);
   const [playthroughs, setPlaythroughs]     = useState([]);
@@ -778,9 +782,12 @@ export default function NotesPage({ params }) {
         setFilesByPt(byPt);
 
         // If we already have this file open in context, don't re-fetch — just restore UI
+        const urlFileId = searchParams.get('fileId') ? Number(searchParams.get('fileId')) : null;
         const savedFileId = notesState.activeFileId;
         const allFiles = Object.values(byPt).flat();
-        const restoredFile = savedFileId ? allFiles.find(f => f.id === savedFileId) : null;
+        const restoredFile = urlFileId
+          ? allFiles.find(f => f.id === urlFileId)
+          : savedFileId ? allFiles.find(f => f.id === savedFileId) : null;
 
         if (restoredFile) {
           const restoredPtId = Object.keys(byPt).find(ptId =>
@@ -788,6 +795,11 @@ export default function NotesPage({ params }) {
           );
           setActivePtId(restoredPtId);
           setActiveFileId(restoredFile.id);
+          if (urlFileId) {
+            const file = await api.noteFiles.get(restoredFile.id);
+            setContent(file.content || '');
+            setSaved(file.content || '');
+          }
         } else {
           const targetPt = pts.find(p => String(p.id) === String(initialPtId)) ?? pts[0];
           if (targetPt) {
@@ -810,6 +822,10 @@ export default function NotesPage({ params }) {
     if (isDirty && activeFileId) { await api.noteFiles.save(activeFileId, { content }); setSaved(content); }
     setActivePtId(ptId);
     setActiveFileId(fileId);
+    // Write fileId to the URL so users can copy the address bar to deep-link.
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('fileId', fileId);
+    router.replace(`?${params.toString()}`, { scroll: false });
     try {
       const file = await api.noteFiles.get(fileId);
       setContent(file.content || '');
@@ -1112,14 +1128,18 @@ export default function NotesPage({ params }) {
                   style={{ zoom: `${previewZoom}%`, cursor: isPresentMode ? 'pointer' : undefined }}
                   onClick={handlePreviewClick}>
                   {content.trim()
-                    ? <ReactMarkdown
+                    ? (tableCounterRef.current = 0, <ReactMarkdown
                         remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()]}
                         rehypePlugins={[rehypeRaw, rehypeSourceLine, rehypeHeadingIds]}
                         components={{
                           img: ({ node, ...props }) => (
                             <div className="img-resizer"><img {...props} /></div>
                           ),
-                          table: ({ node, ...props }) => <SearchableTable {...props} />,
+                          table: ({ node, ...props }) => {
+                          const idx = ++tableCounterRef.current;
+                          const init = props['data-searchable'] ? (searchParams.get(`st${idx}`) ?? '') : '';
+                          return <SearchableTable tableIndex={idx} initialSearch={init} {...props} />;
+                        },
                           pre: ({ node, children, ...props }) => {
                             const codeEl = node?.children?.[0];
                             const cls = codeEl?.properties?.className;
@@ -1139,7 +1159,7 @@ export default function NotesPage({ params }) {
                             return <pre {...props}>{children}</pre>;
                           },
                         }}
-                      >{content}</ReactMarkdown>
+                      >{content}</ReactMarkdown>)
                     : <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>
                   }
                 </div>

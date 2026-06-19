@@ -3,22 +3,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { FiSearch } from 'react-icons/fi';
 
+function matchesQuery(text, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  // OR groups split by ||, AND terms split by && within each group
+  return q.split('||').some(orPart =>
+    orPart.split('&&').every(term => text.includes(term.trim()))
+  );
+}
+
 // Custom react-markdown `table` renderer. Plain tables render unchanged. Tables
 // tagged by the searchable-table remark plugin (data-searchable="true") get a
-// search box that filters rows by the first column (case-insensitive substring;
-// empty box shows every row).
-export default function SearchableTable({ 'data-searchable': searchable, children, ...props }) {
+// search box that filters rows by the first column.
+// Supports && (AND) and || (OR) operators in the search query.
+// tableIndex (1-based) and initialSearch are used for URL-param pre-fill.
+export default function SearchableTable({ 'data-searchable': searchable, tableIndex, initialSearch, children, ...props }) {
   const tableRef = useRef(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialSearch ?? '');
 
   useEffect(() => {
     if (!searchable || !tableRef.current) return;
-    const q = query.trim().toLowerCase();
+    const q = query.toLowerCase();
     const rows = tableRef.current.querySelectorAll('tbody tr');
     rows.forEach((tr) => {
       const cell = tr.querySelector('td');
       const text = (cell?.textContent || '').toLowerCase();
-      tr.style.display = (!q || text.includes(q)) ? '' : 'none';
+      tr.style.display = matchesQuery(text, q) ? '' : 'none';
     });
   }, [query, searchable, children]);
 
