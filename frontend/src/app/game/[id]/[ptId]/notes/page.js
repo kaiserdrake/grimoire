@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +19,7 @@ import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
 import RecentDrawer from '@/components/RecentDrawer';
 import GameTabBar from '@/components/GameTabBar';
+import CameraCapture from '@/components/CameraCapture';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -152,7 +153,7 @@ function NoteIconPicker({ iconGroups, apiBase, onInsert, onClose }) {
 function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
   const toast = useToast();
 
-  const [tabIndex,     setTabIndex]     = useState(0);   // 0=existing, 1=upload, 2=url
+  const [tabIndex,     setTabIndex]     = useState(0);   // 0=existing, 1=upload, 2=url, 3=camera
   const [file,         setFile]         = useState(null);
   const [url,          setUrl]          = useState('');
   const [uploading,    setUploading]    = useState(false);
@@ -183,7 +184,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
     setUploading(true);
     let inserted = null;
     try {
-      const attachment = tabIndex === 1
+      const attachment = (tabIndex === 1 || tabIndex === 3)
         ? await api.attachments.upload(gameId, 'notes', file)
         : await api.attachments.fromUrl(gameId, 'notes', url.trim());
 
@@ -197,7 +198,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
     }
   };
 
-  const canInsert = tabIndex === 1 ? !!file : tabIndex === 2 ? !!url.trim() : false;
+  const canInsert = (tabIndex === 1 || tabIndex === 3) ? !!file : tabIndex === 2 ? !!url.trim() : false;
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} isCentered size="md">
@@ -228,6 +229,11 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
                 _selected={{ bg: 'var(--color-accent-subtle)', color: 'var(--color-accent)', fontWeight: 600 }}
                 _hover={{ color: 'var(--color-text-primary)' }}>
                 <HStack spacing={1}><FiLink size={11} /><span>From URL</span></HStack>
+              </Tab>
+              <Tab fontSize="xs" color="var(--color-text-muted)" bg="transparent" borderRadius="md"
+                _selected={{ bg: 'var(--color-accent-subtle)', color: 'var(--color-accent)', fontWeight: 600 }}
+                _hover={{ color: 'var(--color-text-primary)' }}>
+                <HStack spacing={1}><FiCamera size={11} /><span>Camera</span></HStack>
               </Tab>
             </TabList>
             <TabPanels>
@@ -296,6 +302,9 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
                     Image will be downloaded and hosted locally.
                   </Text>
                 </VStack>
+              </TabPanel>
+              <TabPanel p={0}>
+                <CameraCapture active={isOpen && tabIndex === 3} onCapture={setFile} />
               </TabPanel>
             </TabPanels>
           </Tabs>
