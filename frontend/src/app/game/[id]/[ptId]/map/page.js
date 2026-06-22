@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2 } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2, FiCamera } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +19,7 @@ import { useTabState } from '@/context/TabStateContext';
 import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
 import GameTabBar from '@/components/GameTabBar';
+import CameraCapture from '@/components/CameraCapture';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -541,6 +542,9 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
                 <Tab fontSize="xs" color="var(--color-text-muted)" bg="transparent" borderRadius="md"
                   _selected={{ bg: 'var(--color-accent-subtle)', color: 'var(--color-accent)', fontWeight: 600 }}
                   _hover={{ color: 'var(--color-text-primary)' }}>URL</Tab>
+                <Tab fontSize="xs" color="var(--color-text-muted)" bg="transparent" borderRadius="md"
+                  _selected={{ bg: 'var(--color-accent-subtle)', color: 'var(--color-accent)', fontWeight: 600 }}
+                  _hover={{ color: 'var(--color-text-primary)' }}>Camera</Tab>
               </TabList>
               <TabPanels>
                 {/* Existing attachments tab */}
@@ -614,6 +618,11 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
                     />
                   </FormControl>
                 </TabPanel>
+
+                {/* Camera tab */}
+                <TabPanel p={0} pt={3}>
+                  <CameraCapture active={isOpen && tab === 3} onCapture={setFile} />
+                </TabPanel>
               </TabPanels>
             </Tabs>
           </VStack>
@@ -628,8 +637,8 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
               isDisabled={!canSubmit}
               onClick={() => onConfirm({
                 name: name.trim(),
-                attachmentId: selectedAtt?.id,
-                file: tab === 1 ? file : null,
+                attachmentId: tab === 0 ? selectedAtt?.id : undefined,
+                file: (tab === 1 || tab === 3) ? file : null,
                 url: tab === 2 ? urlInput.trim() : null,
               })}
               style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}
