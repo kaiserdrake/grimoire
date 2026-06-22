@@ -79,10 +79,20 @@ export default function CameraCapture({ active, onCapture }) {
           if (!cancelled) setSelectedId(null);   // re-runs this effect with the default
           return;
         }
-        if (!cancelled) {
-          setError(err?.name === 'NotAllowedError'
-            ? 'Camera permission was denied.'
-            : 'Unable to access the camera.');
+        if (cancelled) return;
+
+        if (err?.name === 'NotAllowedError') {
+          setError('Camera permission was denied.');
+        } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError' || err?.name === 'AbortError') {
+          // Hardware is busy (in use by another app/tab). Keep the picker usable
+          // so the user can switch to a different camera.
+          setError('The selected camera is in use by another application. Choose a different camera below, or close the other app and try again.');
+          try {
+            const list = await navigator.mediaDevices.enumerateDevices();
+            if (!cancelled) setDevices(list.filter(d => d.kind === 'videoinput'));
+          } catch { /* enumeration is best-effort */ }
+        } else {
+          setError('Unable to access the camera.');
         }
         return;
       }
@@ -142,15 +152,6 @@ export default function CameraCapture({ active, onCapture }) {
 
   const retake = () => { clearPreview(); onCapture(null); };
 
-  if (error) {
-    return (
-      <Box py={6} textAlign="center">
-        <FiCamera size={22} style={{ margin: '0 auto 0.4rem', color: 'var(--color-text-muted)' }} />
-        <Text fontSize="sm" style={{ color: 'var(--color-text-muted)' }}>{error}</Text>
-      </Box>
-    );
-  }
-
   return (
     <Box>
       {devices.length > 1 && (
@@ -175,41 +176,52 @@ export default function CameraCapture({ active, onCapture }) {
         overflow="hidden"
         style={{ background: 'var(--color-bg-page)', border: '1px solid var(--color-border-subtle)' }}
       >
-        {/* Live preview — hidden once a frame is captured. */}
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          style={{
-            display: preview ? 'none' : 'block',
-            width: '100%', maxHeight: '260px', objectFit: 'contain', background: '#000',
-          }}
-        />
-        {preview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="Captured photo"
-            style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', background: '#000', display: 'block' }} />
-        )}
-        {!ready && !preview && (
-          <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center">
-            <Spinner size="sm" style={{ color: 'var(--color-accent)' }} />
+        {error ? (
+          <Box py={6} px={4} textAlign="center">
+            <FiCamera size={22} style={{ margin: '0 auto 0.4rem', color: 'var(--color-text-muted)' }} />
+            <Text fontSize="sm" style={{ color: 'var(--color-text-muted)' }}>{error}</Text>
           </Box>
+        ) : (
+          <>
+            {/* Live preview — hidden once a frame is captured. */}
+            <video
+              ref={videoRef}
+              muted
+              playsInline
+              style={{
+                display: preview ? 'none' : 'block',
+                width: '100%', maxHeight: '260px', objectFit: 'contain', background: '#000',
+              }}
+            />
+            {preview && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="Captured photo"
+                style={{ width: '100%', maxHeight: '260px', objectFit: 'contain', background: '#000', display: 'block' }} />
+            )}
+            {!ready && !preview && (
+              <Box position="absolute" inset={0} display="flex" alignItems="center" justifyContent="center">
+                <Spinner size="sm" style={{ color: 'var(--color-accent)' }} />
+              </Box>
+            )}
+          </>
         )}
       </Box>
 
-      <HStack spacing={2} mt={3} justify="center">
-        {preview ? (
-          <Button size="sm" variant="ghost" leftIcon={<FiRefreshCw size={13} />} onClick={retake}
-            style={{ color: 'var(--color-text-secondary)' }}>
-            Retake
-          </Button>
-        ) : (
-          <Button size="sm" leftIcon={<FiCamera size={13} />} onClick={snap} isDisabled={!ready}
-            style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}>
-            Capture
-          </Button>
-        )}
-      </HStack>
+      {!error && (
+        <HStack spacing={2} mt={3} justify="center">
+          {preview ? (
+            <Button size="sm" variant="ghost" leftIcon={<FiRefreshCw size={13} />} onClick={retake}
+              style={{ color: 'var(--color-text-secondary)' }}>
+              Retake
+            </Button>
+          ) : (
+            <Button size="sm" leftIcon={<FiCamera size={13} />} onClick={snap} isDisabled={!ready}
+              style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}>
+              Capture
+            </Button>
+          )}
+        </HStack>
+      )}
     </Box>
   );
 }
