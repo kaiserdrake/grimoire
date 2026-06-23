@@ -970,13 +970,12 @@ tr.notes-preview-line-active th:first-child {
   position: absolute;
   right: 0;
   top: 50%;
-  transform: translateY(-50%) translateX(0);
+  transform: translateY(-50%) translateX(0) rotate(180deg);
   display: flex;
   align-items: center;
   justify-content: center;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  rotate: 180deg;
   height: 80px;
   width: 16px;
   background: var(--color-bg-subtle);
@@ -1508,7 +1507,7 @@ tr.notes-preview-line-active th:first-child {
   justify-content: center;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  rotate: 180deg;
+  transform: rotate(180deg);
   height: 80px;
   width: 16px;
   background: var(--color-bg-subtle);
