@@ -1101,6 +1101,24 @@ tr.notes-preview-line-active th:first-child {
 .map-pin:hover { transform: translate(-50%, -100%) scale(1.2); z-index: 20; }
 .map-pin svg  { width: 28px; height: 28px; }
 
+/* Editable note inside the pin callout bubble */
+.map-pin-note {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 9px;
+  line-height: 1.4;
+  padding: 4px 8px 6px;
+  font-family: inherit;
+}
+.map-pin-note::placeholder { color: rgba(255, 255, 255, 0.3); font-style: italic; }
+.map-pin-note:focus { background: rgba(255, 255, 255, 0.05); }
+
 /* Found pins — dimmed with a small check badge */
 .map-pin--found { filter: grayscale(0.35); }
 .map-pin-found-badge {
@@ -1123,19 +1141,64 @@ tr.notes-preview-line-active th:first-child {
 /* ── Map: interactive legend / visibility panel (left column) ──────────────── */
 .map-workspace {
   grid-template-columns: 280px 1fr;
-  position: relative;          /* positioning context for the map-tree drawer */
 }
 @media (max-width: 640px) {
   .map-workspace { grid-template-columns: 1fr; grid-template-rows: 220px 1fr; }
 }
 
-.map-legend {
+/* Sidebar shell holding the collapsible Maps + Legend sections */
+.map-sidebar {
   display: flex;
   flex-direction: column;
   background: var(--color-bg-subtle);
   border-right: 1px solid var(--color-border);
   overflow: hidden;
+  min-height: 0;
 }
+.map-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 0 auto;            /* collapsed: only the header */
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.map-sidebar-section.open {
+  flex: 1 1 0;               /* open sections share the available height */
+}
+.map-sidebar-section-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 0.5rem;
+  background: var(--color-bg-surface);
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.1s, color 0.1s;
+}
+.map-sidebar-section-header:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.map-sidebar-section-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* The map tree lives inside its section — drop its own chrome */
+.map-sidebar-maps .notes-sidebar {
+  border-right: none;
+  background: transparent;
+  flex: 1;
+  min-height: 0;
+}
+
 .map-legend-header {
   flex-shrink: 0;
   display: flex;
@@ -1258,29 +1321,6 @@ tr.notes-preview-line-active th:first-child {
 }
 .map-legend-row--hidden { opacity: 0.4; }
 .map-legend-row--hidden .map-legend-row-name { text-decoration: line-through; }
-
-/* ── Map: playthrough→map tree drawer (toggled from the topbar) ────────────── */
-.map-tree-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 30;
-}
-.map-tree-drawer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
-  z-index: 31;
-  background: var(--color-bg-subtle);
-  border-right: 1px solid var(--color-border);
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.map-tree-drawer .notes-sidebar { border-right: none; flex: 1; }
 
 /* ── Page layout ───────────────────────────────────────────────────────────── */
 .page-container {

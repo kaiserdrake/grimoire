@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiCamera, FiImage, FiCheck } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiCamera, FiImage, FiCheck, FiList } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -689,7 +689,8 @@ export default function MapPage({ params }) {
   const [hiddenTypes, setHiddenTypes] = useState(() => new Set()); // "color:icon" keys hidden on the map
   const [legendScope, setLegendScope] = useState('map');  // 'map' | 'pt' — which counts the legend shows
   const [legendQuery, setLegendQuery] = useState('');     // legend search text
-  const [treeOpen,    setTreeOpen]    = useState(false);  // playthrough→map tree drawer
+  const [mapsOpen,    setMapsOpen]    = useState(true);   // sidebar "Maps" section expanded
+  const [legendOpen,  setLegendOpen]  = useState(true);   // sidebar "Legend" section expanded
 
   // ── Active selection (persisted via TabStateContext) ────────────────────────
   const [openPinId, setOpenPinId] = useState(null);
@@ -715,6 +716,7 @@ export default function MapPage({ params }) {
   // ── Pin dragging (pin mode only) ────────────────────────────────────────────
   const [draggingPin,  setDraggingPin]  = useState(null); // { pinId, x_percent, y_percent }
   const draggingRef = useRef(null); // mirrors draggingPin for event handlers
+  const justDraggedRef = useRef(false); // true right after a move, to swallow the trailing click
 
   // ── Path drawing ───────────────────────────────────────────────────────────
   // Only one path at a time; stored as array of { x_percent, y_percent, id }
@@ -1050,6 +1052,27 @@ export default function MapPage({ params }) {
     setEditingPin(pin);
   };
 
+  // ── Save an inline-edited pin note/description (from the bubble) ────────────
+  const handleSaveDescription = async (pin, text) => {
+    const next = (text || '').trim();
+    if (next === (pin.description || '')) return; // unchanged
+    setPinsByMap(prev => ({
+      ...prev,
+      [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, description: next || null } : p),
+    }));
+    try {
+      await api.pins.update(activeMap.id, pin.id, {
+        label: pin.label, description: next || null, color: pin.color,
+      });
+    } catch (err) {
+      setPinsByMap(prev => ({
+        ...prev,
+        [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, description: pin.description } : p),
+      }));
+      toast({ title: 'Failed to save note', description: err.message, status: 'error', duration: 3000 });
+    }
+  };
+
   // ── Toggle a pin's "found" progress flag (trackable types only) ─────────────
   const handleToggleFound = async (pin) => {
     const next = !pin.found;
@@ -1087,11 +1110,14 @@ export default function MapPage({ params }) {
     }
   };
 
-  // ── Pin drag (pin mode only) ────────────────────────────────────────────────
+  // ── Pin drag ────────────────────────────────────────────────────────────────
+  // Works in "pin" tool mode and for the currently-selected pin in normal mode.
+  // Movement is tracked so a plain click (no drag) neither saves nor is mistaken
+  // for a drag by the click handler.
   const handlePinDragStart = (e, pin) => {
     e.stopPropagation();
     e.preventDefault();
-    const info = { pinId: pin.id, x_percent: pin.x_percent, y_percent: pin.y_percent };
+    const info = { pinId: pin.id, x_percent: pin.x_percent, y_percent: pin.y_percent, moved: false };
     draggingRef.current = info;
     setDraggingPin(info);
   };
@@ -1101,7 +1127,7 @@ export default function MapPage({ params }) {
     const rect = imgRef.current.getBoundingClientRect();
     const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width)  * 100));
     const y = Math.min(100, Math.max(0, ((e.clientY - rect.top)  / rect.height) * 100));
-    const updated = { ...draggingRef.current, x_percent: x, y_percent: y };
+    const updated = { ...draggingRef.current, x_percent: x, y_percent: y, moved: true };
     draggingRef.current = updated;
     setDraggingPin({ ...updated });
     setPinsByMap(prev => ({
@@ -1114,9 +1140,13 @@ export default function MapPage({ params }) {
 
   const handleContainerMouseUp = async () => {
     if (!draggingRef.current) return;
-    const { pinId, x_percent, y_percent } = draggingRef.current;
+    const { pinId, x_percent, y_percent, moved } = draggingRef.current;
     draggingRef.current = null;
     setDraggingPin(null);
+    // A click without movement isn't a move — don't persist, and let the click
+    // handler run normally.
+    if (!moved) return;
+    justDraggedRef.current = true; // suppress the click that follows the drag
     try {
       const pin = (pinsByMap[activeMap.id] || []).find(p => p.id === pinId);
       if (!pin) return;
@@ -1273,82 +1303,99 @@ export default function MapPage({ params }) {
 
       <div className="notes-workspace map-workspace">
 
-        {/* ── Left: Legend / visibility panel ── */}
+        {/* ── Left: collapsible Maps + Legend sidebar ── */}
         {loading ? null : (
-          <div className="map-legend">
-            <div className="map-legend-header">
-              <div className="map-legend-actions">
-                <button className="map-legend-action" onClick={showAllTypes}>SHOW ALL</button>
-                <button className="map-legend-action" onClick={hideAllTypes}>HIDE ALL</button>
-              </div>
-              <input
-                className="map-legend-search"
-                placeholder="Search…"
-                value={legendQuery}
-                onChange={e => setLegendQuery(e.target.value)}
-              />
-              <div className="map-legend-scope">
-                <button className={legendScope === 'map' ? 'active' : ''} onClick={() => setLegendScope('map')}>Map</button>
-                <button className={legendScope === 'pt'  ? 'active' : ''} onClick={() => setLegendScope('pt')}>Playthrough</button>
-              </div>
-              <div className="map-legend-tip">Tip: right-click the map to add a pin.</div>
+          <div className="map-sidebar">
+
+            {/* MAPS section — playthrough → map tree */}
+            <div className={`map-sidebar-section${mapsOpen ? ' open' : ''}`}>
+              <button className="map-sidebar-section-header" onClick={() => setMapsOpen(o => !o)}>
+                {mapsOpen ? <ChevronDownIcon boxSize={3} /> : <ChevronRightIcon boxSize={3} />}
+                <FiFolder size={12} />
+                <span>Maps</span>
+              </button>
+              {mapsOpen && (
+                <div className="map-sidebar-section-body map-sidebar-maps">
+                  <Sidebar
+                    game={game}
+                    playthroughs={playthroughs}
+                    mapsByPt={mapsByPt}
+                    pinsByMap={pinsByMap}
+                    activeMapId={activeMap?.id}
+                    activePinId={activePinId}
+                    onSelectMap={selectMap}
+                    onSelectPin={handleSelectPin}
+                    onNewMap={(ptId) => setNewMapPtId(ptId)}
+                    onDeleteMap={handleDeleteMap}
+                    initialPtId={initialPtId}
+                    onOpenGame={() => setGameModalOpen(true)}
+                    gameId={id}
+                  />
+                </div>
+              )}
             </div>
 
-            <div className="map-legend-body">
-              {legendGroups.length === 0 ? (
-                <div className="map-legend-empty">
-                  No pin types yet. Configure default markers in Settings, or place pins on the map.
+            {/* LEGEND section — pin types, visibility, progress */}
+            <div className={`map-sidebar-section${legendOpen ? ' open' : ''}`}>
+              <button className="map-sidebar-section-header" onClick={() => setLegendOpen(o => !o)}>
+                {legendOpen ? <ChevronDownIcon boxSize={3} /> : <ChevronRightIcon boxSize={3} />}
+                <FiList size={12} />
+                <span>Legend</span>
+              </button>
+              {legendOpen && (
+                <div className="map-sidebar-section-body">
+                  <div className="map-legend-header">
+                    <div className="map-legend-actions">
+                      <button className="map-legend-action" onClick={showAllTypes}>SHOW ALL</button>
+                      <button className="map-legend-action" onClick={hideAllTypes}>HIDE ALL</button>
+                    </div>
+                    <input
+                      className="map-legend-search"
+                      placeholder="Search…"
+                      value={legendQuery}
+                      onChange={e => setLegendQuery(e.target.value)}
+                    />
+                    <div className="map-legend-scope">
+                      <button className={legendScope === 'map' ? 'active' : ''} onClick={() => setLegendScope('map')}>Map</button>
+                      <button className={legendScope === 'pt'  ? 'active' : ''} onClick={() => setLegendScope('pt')}>Playthrough</button>
+                    </div>
+                    <div className="map-legend-tip">Tip: right-click the map to add a pin.</div>
+                  </div>
+
+                  <div className="map-legend-body">
+                    {legendGroups.length === 0 ? (
+                      <div className="map-legend-empty">
+                        No pin types yet. Configure default markers in Settings, or place pins on the map.
+                      </div>
+                    ) : legendGroups.map(group => (
+                      <div key={group.category} className="map-legend-group">
+                        <div className="map-legend-cat">{group.category}</div>
+                        {group.rows.map(row => {
+                          const hidden = hiddenTypes.has(row.key);
+                          return (
+                            <button
+                              key={row.key}
+                              className={`map-legend-row${hidden ? ' map-legend-row--hidden' : ''}`}
+                              onClick={() => toggleTypeHidden(row.key)}
+                              title={hidden ? 'Hidden — click to show' : 'Click to hide'}
+                            >
+                              <span className="map-legend-row-icon">
+                                <PinIcon color={row.color} icon={row.icon} size={16} />
+                              </span>
+                              <span className="map-legend-row-name">{row.name || '(unnamed)'}</span>
+                              <span className="map-legend-row-count">
+                                {row.trackable ? `${row.found}/${row.count}` : row.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : legendGroups.map(group => (
-                <div key={group.category} className="map-legend-group">
-                  <div className="map-legend-cat">{group.category}</div>
-                  {group.rows.map(row => {
-                    const hidden = hiddenTypes.has(row.key);
-                    return (
-                      <button
-                        key={row.key}
-                        className={`map-legend-row${hidden ? ' map-legend-row--hidden' : ''}`}
-                        onClick={() => toggleTypeHidden(row.key)}
-                        title={hidden ? 'Hidden — click to show' : 'Click to hide'}
-                      >
-                        <span className="map-legend-row-icon">
-                          <PinIcon color={row.color} icon={row.icon} size={16} />
-                        </span>
-                        <span className="map-legend-row-name">{row.name || '(unnamed)'}</span>
-                        <span className="map-legend-row-count">
-                          {row.trackable ? `${row.found}/${row.count}` : row.count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+              )}
             </div>
           </div>
-        )}
-
-        {/* ── Map tree drawer (toggled from the topbar) ── */}
-        {!loading && treeOpen && (
-          <>
-            <div className="map-tree-overlay" onClick={() => setTreeOpen(false)} />
-            <div className="map-tree-drawer">
-              <Sidebar
-                game={game}
-                playthroughs={playthroughs}
-                mapsByPt={mapsByPt}
-                pinsByMap={pinsByMap}
-                activeMapId={activeMap?.id}
-                activePinId={activePinId}
-                onSelectMap={(ptId, map) => { selectMap(ptId, map); setTreeOpen(false); }}
-                onSelectPin={handleSelectPin}
-                onNewMap={(ptId) => setNewMapPtId(ptId)}
-                onDeleteMap={handleDeleteMap}
-                initialPtId={initialPtId}
-                onOpenGame={() => setGameModalOpen(true)}
-                gameId={id}
-              />
-            </div>
-          </>
         )}
 
         {/* ── Right: Canvas area ── */}
@@ -1362,19 +1409,6 @@ export default function MapPage({ params }) {
               {/* Topbar */}
               <div className="notes-editor-topbar">
                 <HStack spacing={2}>
-                  <Tooltip label="Maps" hasArrow placement="bottom" openDelay={300}>
-                    <IconButton
-                      icon={<FiFolder size={13} />}
-                      size="xs"
-                      aria-label="Toggle maps tree"
-                      onClick={() => setTreeOpen(o => !o)}
-                      style={{
-                        background: treeOpen ? 'var(--color-accent)' : 'var(--color-bg-subtle)',
-                        color: treeOpen ? 'white' : 'var(--color-text-secondary)',
-                        border: '1px solid var(--color-border)',
-                      }}
-                    />
-                  </Tooltip>
                   <FiMap size={12} style={{ color: 'var(--color-text-muted)' }} />
                   <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>
                     {activeMap?.name ?? 'No map selected'}
@@ -1444,7 +1478,7 @@ export default function MapPage({ params }) {
                   >
                     <FiMap size={32} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
                     <Text fontSize="sm">No map selected.</Text>
-                    <Text fontSize="xs" mt={1}>Open the <strong>Maps</strong> panel (folder icon, top-left) and click + on a playthrough to add a map.</Text>
+                    <Text fontSize="xs" mt={1}>In the <strong>Maps</strong> section on the left, click + on a playthrough to add a map.</Text>
                   </Flex>
 
                 ) : (
@@ -1485,9 +1519,9 @@ export default function MapPage({ params }) {
                       className="map-container"
                       onClick={handleMapClick}
                       onContextMenu={handleMapContextMenu}
-                      onMouseMove={toolMode === 'pin' ? handleContainerMouseMove : undefined}
-                      onMouseUp={toolMode === 'pin' ? handleContainerMouseUp : undefined}
-                      onMouseLeave={toolMode === 'pin' ? handleContainerMouseUp : undefined}
+                      onMouseMove={handleContainerMouseMove}
+                      onMouseUp={handleContainerMouseUp}
+                      onMouseLeave={handleContainerMouseUp}
                       style={{ cursor: draggingPin ? 'grabbing' : toolMode !== 'none' ? 'crosshair' : 'default' }}
                     >
                       {/* Resizable wrapper */}
@@ -1622,6 +1656,8 @@ export default function MapPage({ params }) {
                         const isHovered = openPinId === pin.id;
                         const isTrackable = trackableKeys.has(typeKey(pinColor, pinIcon));
                         const isFound = !!pin.found;
+                        // Draggable in pin tool mode, or when this pin is the selected one.
+                        const isDraggable = toolMode === 'pin' || isHovered;
                         return (
                           <div
                             key={pin.id}
@@ -1630,14 +1666,18 @@ export default function MapPage({ params }) {
                               left: `${pin.x_percent}%`,
                               top: `${pin.y_percent}%`,
                               transform: 'translate(-50%, -50%)',
-                              cursor: toolMode === 'pin' ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
+                              cursor: isDragging ? 'grabbing' : (isDraggable ? 'grab' : 'pointer'),
                               opacity: isDragging ? 0.85 : (isFound ? 0.45 : 1),
                               filter: isDragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' : undefined,
                               zIndex: isDragging ? 50 : isHovered ? 30 : undefined,
                             }}
-                            onMouseDown={toolMode === 'pin' ? (e) => { handlePinDragStart(e, pin); setOpenPinId(null); } : undefined}
+                            onMouseDown={isDraggable ? (e) => {
+                              handlePinDragStart(e, pin);
+                              if (toolMode === 'pin') setOpenPinId(null);
+                            } : undefined}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (justDraggedRef.current) { justDraggedRef.current = false; return; }
                               if (toolMode === 'pin') { openEditPin(pin); return; }
                               setOpenPinId(prev => prev === pin.id ? null : pin.id);
                               setActivePinId(pin.id);
@@ -1652,6 +1692,7 @@ export default function MapPage({ params }) {
                             {isHovered && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
                                 style={{
                                   position: 'absolute',
                                   bottom: 'calc(100% + 8px)',
@@ -1686,7 +1727,7 @@ export default function MapPage({ params }) {
                                     justifyContent: 'space-between',
                                     gap: '6px',
                                     padding: '4px 4px 4px 8px',
-                                    borderBottom: pin.description ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                                    borderBottom: '1px solid rgba(255,255,255,0.06)',
                                   }}>
                                     <div style={{ fontWeight: 600, fontSize: '10px', lineHeight: 1.3, color: 'rgba(255,255,255,0.95)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                                       {pin.displayLabel}
@@ -1731,12 +1772,16 @@ export default function MapPage({ params }) {
                                       <HoldToDelete onDelete={() => handleDeletePin(pin.id)} inMap />
                                     </div>
                                   </div>
-                                  {/* Description */}
-                                  {pin.description && (
-                                    <div style={{ fontSize: '9px', lineHeight: 1.4, color: 'rgba(255,255,255,0.5)', padding: '4px 8px 5px', whiteSpace: 'pre-wrap' }}>
-                                      {pin.description}
-                                    </div>
-                                  )}
+                                  {/* Editable description / note */}
+                                  <textarea
+                                    key={pin.id}
+                                    className="map-pin-note"
+                                    defaultValue={pin.description || ''}
+                                    placeholder="Add a note…"
+                                    rows={2}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onBlur={(e) => handleSaveDescription(pin, e.target.value)}
+                                  />
                                 </div>
                                 {/* Arrow */}
                                 <div style={{
