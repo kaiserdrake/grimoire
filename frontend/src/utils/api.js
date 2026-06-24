@@ -124,6 +124,8 @@ export const api = {
     get:    (mapId)              => apiFetch(`/api/maps/${mapId}`),
     // data = { name, attachment_id }
     create: (ptId, data)         => apiFetch(`/api/playthroughs/${ptId}/maps`, { method: 'POST', body: JSON.stringify(data) }),
+    // data = { attachment_id, pins?: [{ id, x_percent, y_percent }] }
+    updateImage: (mapId, data)   => apiFetch(`/api/maps/${mapId}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (mapId)              => apiFetch(`/api/maps/${mapId}`, { method: 'DELETE' }),
   },
 

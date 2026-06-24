@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2, FiCamera } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2, FiCamera, FiImage } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -109,6 +109,44 @@ function HoldToDelete({ onDelete, inMap = false }) {
   );
 }
 
+// ── Load an image's intrinsic size ────────────────────────────────────────────
+function loadImageSize(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// ── Re-fit pins from an old image to a new one ─────────────────────────────────
+// Pins are stored as 0–100 percentages of the displayed image. When the image is
+// replaced we keep each pin locked to the same point of the map *content* by
+// scaling the old content uniformly (preserving aspect ratio) to fit centered
+// inside the new image — a "contain" transform. When the aspect ratios match, the
+// scale is uniform and the offsets are zero, so every percentage is unchanged
+// (pins retained 100%); when they differ, the content is centered/letterboxed and
+// pins move with it instead of stretching.
+function refitPins(pins, oldSize, newSize) {
+  const { w: ow, h: oh } = oldSize || {};
+  const { w: nw, h: nh } = newSize || {};
+  if (!ow || !oh || !nw || !nh) return pins.map(p => ({ id: p.id, x_percent: p.x_percent, y_percent: p.y_percent }));
+  const s = Math.min(nw / ow, nh / oh);
+  const offsetX = (nw - ow * s) / 2;
+  const offsetY = (nh - oh * s) / 2;
+  return pins.map(p => {
+    const px = (p.x_percent / 100) * ow;
+    const py = (p.y_percent / 100) * oh;
+    const nx = offsetX + px * s;
+    const ny = offsetY + py * s;
+    return {
+      id: p.id,
+      x_percent: Math.min(100, Math.max(0, (nx / nw) * 100)),
+      y_percent: Math.min(100, Math.max(0, (ny / nh) * 100)),
+    };
+  });
+}
+
 // ── Disambiguate pin labels ───────────────────────────────────────────────────
 function disambiguatePinLabels(pins) {
   const counts = {};
@@ -138,21 +176,25 @@ function StatColumn({ title, stats, emptyHint }) {
           {emptyHint}
         </Text>
       ) : (
-        <VStack spacing={1} align="stretch">
+        <Box>
           {stats.map((d, i) => (
-            <Flex key={`${d.color}:${d.icon}:${d.label}:${i}`} align="center" gap={2}>
-              <Box flexShrink={0}><PinIcon color={d.color} icon={d.icon} size={18} /></Box>
-              <Text fontSize="sm" flex={1} noOfLines={1}
-                style={{ color: 'var(--color-text-secondary)' }}>
+            <Flex
+              key={`${d.color}:${d.icon}:${d.label}:${i}`}
+              align="center" gap={2}
+              style={{ height: '18px', lineHeight: '18px' }}
+            >
+              <Box flexShrink={0} style={{ display: 'flex', alignItems: 'center', lineHeight: 0 }}>
+                <PinIcon color={d.color} icon={d.icon} size={14} />
+              </Box>
+              <Text fontSize="13px" flex={1} noOfLines={1} style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
                 {d.label}
               </Text>
-              <Text fontSize="sm" fontWeight={700}
-                style={{ color: 'var(--color-text-primary)' }}>
+              <Text fontSize="13px" fontWeight={700} style={{ color: 'var(--color-text-primary)', lineHeight: '18px' }}>
                 {d.count}
               </Text>
             </Flex>
           ))}
-        </VStack>
+        </Box>
       )}
     </Box>
   );
@@ -494,7 +536,10 @@ function Sidebar({
 }
 
 // ── Map Modal ─────────────────────────────────────────────────────────────
-function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase }) {
+// mode: 'create' adds a new map (asks for a name); 'update' swaps the image of an
+// existing map (keeps its name, pins and other data) and re-fits the pins.
+function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase, mode = 'create' }) {
+  const isUpdate = mode === 'update';
   const [name,       setName]       = useState('');
   const [tab,        setTab]        = useState(0);
   const [file,       setFile]       = useState(null);
@@ -509,7 +554,8 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
     api.attachments.list(gameId, 'maps').then(setAttachments).catch(() => {});
   }, [isOpen, gameId]);
 
-  const canSubmit = name.trim() && (file || urlInput.trim() || selectedAtt);
+  const hasImage  = file || urlInput.trim() || selectedAtt;
+  const canSubmit = isUpdate ? hasImage : (name.trim() && hasImage);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="md" isCentered>
@@ -519,17 +565,24 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
         border: '1px solid var(--color-border)',
         color: 'var(--color-text-primary)',
       }}>
-        <ModalHeader fontSize="sm">Add Map</ModalHeader>
+        <ModalHeader fontSize="sm">{isUpdate ? 'Update Map Image' : 'Add Map'}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
           <VStack spacing={4} align="stretch">
-            <FormControl isRequired>
-              <FormLabel fontSize="xs" style={{ color: 'var(--color-text-secondary)' }}>Map Name</FormLabel>
-              <Input size="sm" value={name} onChange={e => setName(e.target.value)}
-                placeholder="e.g. World Map"
-                style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-              />
-            </FormControl>
+            {isUpdate ? (
+              <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>
+                Pick a new image for this map. Pins and other data are kept; pin positions
+                are re-fitted to the new image.
+              </Text>
+            ) : (
+              <FormControl isRequired>
+                <FormLabel fontSize="xs" style={{ color: 'var(--color-text-secondary)' }}>Map Name</FormLabel>
+                <Input size="sm" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="e.g. World Map"
+                  style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                />
+              </FormControl>
+            )}
 
             <Tabs index={tab} onChange={setTab} size="sm" variant="enclosed">
               <TabList mb={3}>
@@ -633,7 +686,7 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
               style={{ color: 'var(--color-text-secondary)' }}>
               Cancel
             </Button>
-            <Button size="sm" isLoading={uploading} loadingText="Uploading…" spinnerPlacement="start"
+            <Button size="sm" isLoading={uploading} loadingText={isUpdate ? 'Updating…' : 'Uploading…'} spinnerPlacement="start"
               isDisabled={!canSubmit}
               onClick={() => onConfirm({
                 name: name.trim(),
@@ -643,7 +696,7 @@ function NewMapModal({ isOpen, onClose, onConfirm, uploading, gameId, apiBase })
               })}
               style={{ background: 'var(--color-accent)', color: 'white', border: 'none' }}
             >
-              {tab === 0 ? 'Use Image' : 'Upload'}
+              {isUpdate ? 'Update Image' : (tab === 0 ? 'Use Image' : 'Upload')}
             </Button>
           </HStack>
         </ModalFooter>
@@ -705,6 +758,10 @@ export default function MapPage({ params }) {
   // ── Upload modal ─────────────────────────────────────────────────────────────
   const [newMapPtId, setNewMapPtId] = useState(null);
   const [uploading,  setUploading]  = useState(false);
+
+  // ── Update-image modal ───────────────────────────────────────────────────────
+  const [updatingImage, setUpdatingImage] = useState(false); // modal open flag
+  const [savingImage,    setSavingImage]   = useState(false); // in-flight flag
 
   // ── Register last visited ───────────────────────────────────────────────────
   useEffect(() => {
@@ -823,6 +880,78 @@ export default function MapPage({ params }) {
         await selectMap(newMapPtId, created);
         setNewMapPtId(null);  // ← modal closes only after spinner has been visible
       }
+    }
+  };
+
+  // ── Update map image ──────────────────────────────────────────────────────────
+  // Resolves the chosen image to an attachment, re-fits the existing pins to the
+  // new image's dimensions, then swaps the image. Pins and other map data are kept.
+  const handleUpdateMapImage = async ({ attachmentId, file, url }) => {
+    if (!activeMap) return;
+    const mapId = activeMap.id;
+    setSavingImage(true);
+    let done = false;
+    try {
+      // 1. Resolve the new image to an attachment (same flow as map creation).
+      //    Upload/URL return the record directly; an existing pick needs a lookup.
+      let attachmentIdToUse = attachmentId;
+      let newAttUrl = null;
+      if (!attachmentIdToUse) {
+        const attachment = file
+          ? await api.attachments.upload(id, 'maps', file)
+          : await api.attachments.fromUrl(id, 'maps', url);
+        attachmentIdToUse = attachment.id;
+        newAttUrl = attachment.url;
+      } else {
+        const existing = (await api.attachments.list(id, 'maps')).find(a => a.id === attachmentIdToUse);
+        newAttUrl = existing?.url ?? null;
+      }
+
+      // 2. Measure both images so pins can be re-fitted to the new aspect ratio.
+      const oldSize = imgRef.current?.naturalWidth
+        ? { w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight }
+        : null;
+      let newSize = null;
+      if (newAttUrl) {
+        try { newSize = await loadImageSize(`${apiBase}${newAttUrl}`); } catch { /* keep percentages */ }
+      }
+
+      const currentPins = pinsByMap[mapId] || [];
+      const refitted = refitPins(currentPins, oldSize, newSize);
+
+      // 3. Persist the swap + new pin positions in one call.
+      const updated = await api.maps.updateImage(mapId, {
+        attachment_id: attachmentIdToUse,
+        pins: refitted,
+      });
+
+      // 4. Reflect the change locally.
+      const refitById = new Map(refitted.map(p => [p.id, p]));
+      setPinsByMap(prev => ({
+        ...prev,
+        [mapId]: (prev[mapId] || []).map(p => {
+          const r = refitById.get(p.id);
+          return r ? { ...p, x_percent: r.x_percent, y_percent: r.y_percent } : p;
+        }),
+      }));
+      const newImageUrl = updated.image_url;
+      setMapState(s => ({
+        ...s,
+        activeMap: s.activeMap?.id === mapId ? { ...s.activeMap, image_url: newImageUrl } : s.activeMap,
+      }));
+      setMapsByPt(prev => {
+        const next = { ...prev };
+        for (const ptId of Object.keys(next)) {
+          next[ptId] = next[ptId].map(m => m.id === mapId ? { ...m, image_url: newImageUrl } : m);
+        }
+        return next;
+      });
+      done = true;
+    } catch (err) {
+      toast({ title: 'Failed to update image', description: err.message, status: 'error', duration: 4000 });
+    } finally {
+      setSavingImage(false);
+      if (done) setUpdatingImage(false);
     }
   };
 
@@ -1015,33 +1144,42 @@ export default function MapPage({ params }) {
 
   const activePins = activeMap ? (pinsByMap[activeMap.id] || []) : [];
 
-  // ── Per-game pin statistics (across all maps in this game) ──────────────────
-  // Left column: each configured default and how many pins match its
-  // color:icon — e.g. "Rare Item A : 6 total".
-  // Right column: every remaining pin whose color:icon is NOT a configured
-  // default, grouped by label.
-  const allPins = Object.values(pinsByMap).flat();
-  const defaultStats = mapDefaults.map(d => ({
-    ...d,
-    count: allPins.filter(p => {
-      const s = parsePinStyle(p.color);
-      return s.color === d.color && s.icon === d.icon;
-    }).length,
-  }));
+  // ── Pin statistics ──────────────────────────────────────────────────────────
+  // Computed for two scopes: the current map, and the current playthrough (all
+  // maps under it). Each scope splits into:
+  //   Defaults — each configured default marker and how many pins match its
+  //              color:icon (e.g. "Rare Item A : 6").
+  //   Other    — every remaining pin whose color:icon is NOT a configured
+  //              default, grouped by label.
+  const computeStats = (pins) => {
+    const defaultStats = mapDefaults.map(d => ({
+      ...d,
+      count: pins.filter(p => {
+        const s = parsePinStyle(p.color);
+        return s.color === d.color && s.icon === d.icon;
+      }).length,
+    }));
 
-  const defaultKeys = new Set(mapDefaults.map(d => `${d.color}:${d.icon}`));
-  const nonDefaultStats = Object.values(
-    allPins.reduce((acc, p) => {
-      const s = parsePinStyle(p.color);
-      if (defaultKeys.has(`${s.color}:${s.icon}`)) return acc;
-      const key = `${s.color}:${s.icon}:${p.label}`;
-      if (!acc[key]) acc[key] = { icon: s.icon, color: s.color, label: p.label, count: 0 };
-      acc[key].count++;
-      return acc;
-    }, {})
-  ).sort((a, b) => b.count - a.count);
+    const defaultKeys = new Set(mapDefaults.map(d => `${d.color}:${d.icon}`));
+    const nonDefaultStats = Object.values(
+      pins.reduce((acc, p) => {
+        const s = parsePinStyle(p.color);
+        if (defaultKeys.has(`${s.color}:${s.icon}`)) return acc;
+        const key = `${s.color}:${s.icon}:${p.label}`;
+        if (!acc[key]) acc[key] = { icon: s.icon, color: s.color, label: p.label, count: 0 };
+        acc[key].count++;
+        return acc;
+      }, {})
+    ).sort((a, b) => b.count - a.count);
 
-  const hasStats = defaultStats.length > 0 || nonDefaultStats.length > 0;
+    return { defaultStats, nonDefaultStats };
+  };
+
+  const currentPtPins = (mapsByPt[activePtId] || []).flatMap(m => pinsByMap[m.id] || []);
+  const mapStats = computeStats(activePins);
+  const ptStats  = computeStats(currentPtPins);
+
+  const hasStats = mapDefaults.length > 0 || currentPtPins.length > 0;
 
   // Build SVG polyline points string from waypoints
   const buildPolylinePoints = (waypoints, containerRect) => {
@@ -1130,6 +1268,21 @@ export default function MapPage({ params }) {
                         />
                       </Tooltip>
 
+                      {/* Update map image — keeps pins & data */}
+                      <Tooltip label="Update image" hasArrow placement="bottom" openDelay={300}>
+                        <IconButton
+                          icon={<FiImage size={14} />}
+                          size="xs"
+                          aria-label="Update image"
+                          onClick={() => setUpdatingImage(true)}
+                          style={{
+                            background: 'var(--color-bg-subtle)',
+                            color: 'var(--color-text-secondary)',
+                            border: '1px solid var(--color-border)',
+                          }}
+                        />
+                      </Tooltip>
+
                       {/* Pin statistics */}
                       {hasStats && (
                         <Popover placement="bottom-start" closeOnBlur>
@@ -1154,10 +1307,35 @@ export default function MapPage({ params }) {
                             style={{ color: 'var(--color-text-primary)', width: '400px' }}
                           >
                             <PopoverBody py={3} px={3}>
-                              <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
-                                <StatColumn title="Defaults" stats={defaultStats} emptyHint="None configured." />
-                                <StatColumn title="Other" stats={nonDefaultStats} emptyHint="No other pins." />
-                              </Box>
+                              <VStack spacing={3} align="stretch">
+                                {/* Current map */}
+                                <Box>
+                                  <Text fontSize="10px" fontWeight={700} textTransform="uppercase"
+                                    letterSpacing="0.06em" mb={2}
+                                    style={{ color: 'var(--color-text-secondary)' }}>
+                                    Statistics On Current Map
+                                  </Text>
+                                  <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
+                                    <StatColumn title="Defaults" stats={mapStats.defaultStats} emptyHint="None configured." />
+                                    <StatColumn title="Other" stats={mapStats.nonDefaultStats} emptyHint="No other pins." />
+                                  </Box>
+                                </Box>
+
+                                <Box style={{ height: '1px', background: 'var(--color-border)' }} />
+
+                                {/* Current playthrough */}
+                                <Box>
+                                  <Text fontSize="10px" fontWeight={700} textTransform="uppercase"
+                                    letterSpacing="0.06em" mb={2}
+                                    style={{ color: 'var(--color-text-secondary)' }}>
+                                    Statistics On Current Playthrough
+                                  </Text>
+                                  <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
+                                    <StatColumn title="Defaults" stats={ptStats.defaultStats} emptyHint="None configured." />
+                                    <StatColumn title="Other" stats={ptStats.nonDefaultStats} emptyHint="No other pins." />
+                                  </Box>
+                                </Box>
+                              </VStack>
                             </PopoverBody>
                           </PopoverContent>
                         </Popover>
@@ -1501,6 +1679,17 @@ export default function MapPage({ params }) {
         onClose={() => setNewMapPtId(null)}
         onConfirm={handleCreateMap}
         uploading={uploading}
+        apiBase={apiBase}
+        gameId={id}
+      />
+
+      {/* ── Update Map Image Modal ── */}
+      <NewMapModal
+        mode="update"
+        isOpen={updatingImage}
+        onClose={() => setUpdatingImage(false)}
+        onConfirm={handleUpdateMapImage}
+        uploading={savingImage}
         apiBase={apiBase}
         gameId={id}
       />

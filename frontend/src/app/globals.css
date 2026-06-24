@@ -484,6 +484,23 @@ body {
   background: var(--color-accent-subtle);
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
+/* Hover "#" anchor on preview headings — copies a deep-link to the section */
+.notes-heading-anchor { scroll-margin-top: 0.5rem; }
+.notes-heading-link {
+  opacity: 0;
+  margin-left: 0.35em;
+  padding: 0 0.15em;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 400;
+  font-size: 0.8em;
+  color: var(--color-text-muted);
+  vertical-align: baseline;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.notes-heading-anchor:hover .notes-heading-link { opacity: 1; }
+.notes-heading-link:hover { color: var(--color-accent); }
 /* Table rows highlight on their cells (tr background/shadow don't render under border-collapse) */
 tr.notes-preview-line-active {
   background: none;

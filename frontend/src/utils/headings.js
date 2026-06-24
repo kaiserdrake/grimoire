@@ -12,6 +12,22 @@ export function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
+// Attach a `slug` to each extracted heading using the same dedup scheme as
+// rehypeHeadingIds, so a TOC entry / URL anchor always matches the id the
+// preview assigns to that heading.
+export function withHeadingSlugs(headings) {
+  const seen = new Map();
+  return (headings || []).map((h) => {
+    let slug = slugify(h.text);
+    if (slug) {
+      const n = seen.get(slug) || 0;
+      seen.set(slug, n + 1);
+      if (n > 0) slug = `${slug}-${n + 1}`;
+    }
+    return { ...h, slug };
+  });
+}
+
 // Rehype plugin: give every heading (h1–h6) an id derived from its text, deduping
 // collisions with a -2, -3, … suffix (same scheme github-slugger uses).
 export function rehypeHeadingIds() {

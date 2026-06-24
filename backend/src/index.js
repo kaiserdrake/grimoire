@@ -1363,6 +1363,75 @@ app.post('/api/playthroughs/:ptId/maps', isAuthenticated, async (req, res) => {
   }
 });
 
+// Update a map's image — swaps the attachment, optionally re-fits pin positions.
+// Body: { attachment_id, pins?: [{ id, x_percent, y_percent }] }
+// The old attachment (file + record) is cleaned up when no other map references it.
+app.patch('/api/maps/:mapId', isAuthenticated, async (req, res) => {
+  const { mapId } = req.params;
+  const { attachment_id, pins } = req.body;
+  const userId = req.user.id;
+  if (!attachment_id) {
+    return res.status(400).json({ message: 'attachment_id is required.' });
+  }
+  try {
+    const mapResult = await query(
+      'SELECT id, game_id, attachment_id FROM game_maps WHERE id=$1 AND user_id=$2',
+      [mapId, userId]
+    );
+    if (mapResult.rows.length === 0) return res.status(404).json({ message: 'Map not found.' });
+    const { game_id, attachment_id: oldAttachmentId } = mapResult.rows[0];
+
+    // Verify the new attachment belongs to this game and is maps-set
+    const attCheck = await query(
+      "SELECT id, url, mime_type FROM game_attachments WHERE id=$1 AND game_id=$2 AND user_id=$3 AND set_type='maps'",
+      [attachment_id, game_id, userId]
+    );
+    if (attCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Attachment not found or does not belong to this game.' });
+    }
+
+    await query('UPDATE game_maps SET attachment_id=$1 WHERE id=$2 AND user_id=$3', [attachment_id, mapId, userId]);
+
+    // Re-fit pins to the new image dimensions (computed client-side)
+    if (Array.isArray(pins)) {
+      for (const p of pins) {
+        if (p == null || p.id == null || p.x_percent == null || p.y_percent == null) continue;
+        await query(
+          'UPDATE map_pins SET x_percent=$1, y_percent=$2 WHERE id=$3 AND map_id=$4',
+          [p.x_percent, p.y_percent, p.id, mapId]
+        );
+      }
+    }
+
+    // Clean up the previous attachment if it's now orphaned (no other map uses it)
+    if (oldAttachmentId && oldAttachmentId !== attachment_id) {
+      const stillUsed = await query(
+        'SELECT 1 FROM game_maps WHERE attachment_id=$1 LIMIT 1',
+        [oldAttachmentId]
+      );
+      if (stillUsed.rows.length === 0) {
+        const oldAtt = await query('SELECT file_path FROM game_attachments WHERE id=$1', [oldAttachmentId]);
+        await query('DELETE FROM game_attachments WHERE id=$1', [oldAttachmentId]);
+        const oldPath = oldAtt.rows[0]?.file_path;
+        if (oldPath) {
+          fs.unlink(oldPath, (err) => {
+            if (err) console.error(`Failed to delete map file ${oldPath}:`, err);
+          });
+        }
+      }
+    }
+
+    res.json({
+      id: Number(mapId),
+      image_url: attCheck.rows[0].url,
+      image_mime: attCheck.rows[0].mime_type,
+    });
+  } catch (err) {
+    console.error('Error updating map image:', err);
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 // Get a single map — returns image_url instead of base64 blob
 app.get('/api/maps/:mapId', isAuthenticated, async (req, res) => {
   const { mapId } = req.params;
