@@ -30,7 +30,7 @@ import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } 
 import { makeRemarkNoteIconPlugin, buildIconMap, iconTokenFor, normalizeIcon } from '@/utils/noteIcons';
 import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
 import SearchableTable from '@/components/SearchableTable';
-import { slugify, rehypeHeadingIds } from '@/utils/headings';
+import { slugify, rehypeHeadingIds, withHeadingSlugs } from '@/utils/headings';
 import TierList from '@/components/TierList';
 
 // ── Markdown editor helpers ───────────────────────────────────────────────────
@@ -722,6 +722,7 @@ export default function NotesPage({ params }) {
   const saveTimer   = useRef(null);
   const textareaRef = useRef(null);
   const previewRef  = useRef(null);
+  const lastNavSlug = useRef(null); // last heading slug auto-scrolled from the URL
 
   const [activeLine, setActiveLine] = useState(null);
 
@@ -832,8 +833,11 @@ export default function NotesPage({ params }) {
     setActivePtId(ptId);
     setActiveFileId(fileId);
     // Write fileId to the URL so users can copy the address bar to deep-link.
+    // Drop any heading anchor — it belonged to the previously open file.
     const params = new URLSearchParams(searchParams.toString());
     params.set('fileId', fileId);
+    params.delete('heading');
+    lastNavSlug.current = null;
     router.replace(`?${params.toString()}`, { scroll: false });
     try {
       const file = await api.noteFiles.get(fileId);
@@ -879,11 +883,41 @@ export default function NotesPage({ params }) {
     saveTimer.current = setTimeout(() => save(next), 2000);
   }, [content, save]);
 
-  // Scroll the preview to a heading id (used by tier-card section links).
-  const navigateSection = useCallback((slug) => {
+  // Scroll the preview to a heading id and reflect it in the URL so the address
+  // bar can be copied as a deep-link to that section. Works in split, locked and
+  // present mode since the preview is always rendered. `writeUrl=false` is used by
+  // the URL-driven scroll so it doesn't redundantly rewrite the param.
+  const navigateSection = useCallback((slug, { writeUrl = true } = {}) => {
+    if (!slug) return false;
     const el = previewRef.current?.querySelector('#' + (window.CSS?.escape ? CSS.escape(slug) : slug));
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+    if (writeUrl) {
+      const params = new URLSearchParams(window.location.search);
+      params.set('heading', slug);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+    return !!el;
+  }, [router]);
+
+  // Deep-link: when the URL carries a ?heading=<slug>, scroll the preview to it
+  // once the file's content has rendered. Guarded so typing (which changes
+  // `content` but not the slug) doesn't keep yanking the scroll position.
+  useEffect(() => {
+    const slug = searchParams.get('heading');
+    if (!slug) { lastNavSlug.current = null; return; }
+    if (!content || lastNavSlug.current === slug) return;
+    // The preview may not be painted yet on first load — retry briefly.
+    let tries = 0;
+    const tryScroll = () => {
+      if (navigateSection(slug, { writeUrl: false })) {
+        lastNavSlug.current = slug;
+      } else if (tries++ < 10) {
+        setTimeout(tryScroll, 100);
+      }
+    };
+    const t = setTimeout(tryScroll, 50);
+    return () => clearTimeout(t);
+  }, [content, searchParams, navigateSection]);
 
   const handleImageInsert = (markdown) => {
     const ta = textareaRef.current;
@@ -988,7 +1022,41 @@ export default function NotesPage({ params }) {
     [gamepad, iconMap],
   );
   const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds], []);
+  // Headings render with a hover "#" anchor that copies a deep-link to the section
+  // (and scrolls to it). The id is assigned by rehypeHeadingIds. Works in locked /
+  // present mode too, since the preview is the visible pane there.
+  const makeHeading = (Tag) => ({ node, children, ...props }) => {
+    const id = props.id;
+    const copyLink = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!id) return;
+      navigateSection(id); // scroll + reflect ?heading in the URL
+      const params = new URLSearchParams(window.location.search);
+      params.set('heading', id);
+      const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+      navigator.clipboard?.writeText(url)
+        .then(() => toast({ title: 'Section link copied', status: 'success', duration: 1500 }))
+        .catch(() => {});
+    };
+    return (
+      <Tag {...props} className="notes-heading-anchor">
+        {children}
+        <button type="button" className="notes-heading-link"
+          onClick={copyLink} aria-label="Copy link to this section" title="Copy link to this section">
+          #
+        </button>
+      </Tag>
+    );
+  };
+
   const markdownComponents = useMemo(() => ({
+    h1: makeHeading('h1'),
+    h2: makeHeading('h2'),
+    h3: makeHeading('h3'),
+    h4: makeHeading('h4'),
+    h5: makeHeading('h5'),
+    h6: makeHeading('h6'),
     img: ({ node, ...props }) => (
       <div className="img-resizer"><img {...props} /></div>
     ),
@@ -1193,16 +1261,22 @@ export default function NotesPage({ params }) {
                   onToggle={() => setDrawerOpen(o => !o)}
                   activeTab={drawerTab}
                   onTabChange={setDrawerTab}
-                  headings={extractHeadings(content)}
+                  headings={withHeadingSlugs(extractHeadings(content))}
                   onHeadingClick={(h) => {
-                    if (!textareaRef.current) return;
-                    const idx = content.indexOf(h.text);
-                    if (idx >= 0) {
-                      textareaRef.current.focus();
-                      textareaRef.current.setSelectionRange(idx, idx);
-                      textareaRef.current.scrollTop =
-                        (idx / content.length) * textareaRef.current.scrollHeight;
-                        }
+                    // Scroll the preview and deep-link the section — works whether
+                    // locked/present or split.
+                    lastNavSlug.current = h.slug;
+                    navigateSection(h.slug);
+                    // In edit mode, also move the editor caret to the heading.
+                    if (!isPresentMode && textareaRef.current) {
+                      const idx = content.indexOf(h.text);
+                      if (idx >= 0) {
+                        textareaRef.current.focus();
+                        textareaRef.current.setSelectionRange(idx, idx);
+                        textareaRef.current.scrollTop =
+                          (idx / content.length) * textareaRef.current.scrollHeight;
+                      }
+                    }
                   }}
                 />
               </div>
@@ -1232,7 +1306,11 @@ export default function NotesPage({ params }) {
         onInsert={handleImageInsert}
         gameId={id}
       />
-      <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
+      {/* Standalone Recent/Bulletin drawer — only for the no-file empty state.
+          When a file is open, NotesDrawer (which also has the CONTENTS/TOC tab)
+          is rendered instead; showing both stacks them on the same edge and
+          hides the TOC. */}
+      {!activeFile && <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />}
     </>
   );
 }
