@@ -1520,7 +1520,7 @@ app.post('/api/maps/:mapId/pins', isAuthenticated, async (req, res) => {
 
 app.put('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => {
   const { mapId, pinId } = req.params;
-  const { label, description, color, x_percent, y_percent } = req.body;
+  const { label, description, color, x_percent, y_percent, found } = req.body;
   const userId = req.user.id;
   try {
     const mapCheck = await query('SELECT id FROM game_maps WHERE id=$1 AND user_id=$2', [mapId, userId]);
@@ -1532,6 +1532,7 @@ app.put('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => {
 
     if (x_percent != null) { fields.push(`x_percent=$${values.length + 1}`); values.push(x_percent); }
     if (y_percent != null) { fields.push(`y_percent=$${values.length + 1}`); values.push(y_percent); }
+    if (found      != null) { fields.push(`found=$${values.length + 1}`);     values.push(!!found); }
 
     values.push(pinId, mapId);
     const result = await query(
@@ -1704,6 +1705,7 @@ async function runMigrations() {
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS remarks TEXT`);
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS wishlist_remarks TEXT`);
   await query(`ALTER TABLE playthroughs ADD COLUMN IF NOT EXISTS rating REAL NOT NULL DEFAULT 2.0`);
+  await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS found BOOLEAN NOT NULL DEFAULT false`);
 }
 
 runMigrations()

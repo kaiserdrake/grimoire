@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiBarChart2, FiCamera, FiImage } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiCamera, FiImage, FiCheck, FiList } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -157,47 +157,6 @@ function disambiguatePinLabels(pins) {
     seen[p.label] = (seen[p.label] || 0) + 1;
     return { ...p, displayLabel: `${p.label} (${seen[p.label]})` };
   });
-}
-
-// ── Statistics column (used in the pin-statistics popover) ────────────────────
-function StatColumn({ title, stats, emptyHint }) {
-  const total = stats.reduce((sum, s) => sum + s.count, 0);
-  return (
-    <Box minW={0}>
-      <Flex align="baseline" justify="space-between" mb={2} gap={2}>
-        <Text fontSize="11px" fontWeight={700} textTransform="uppercase"
-          letterSpacing="0.06em" style={{ color: 'var(--color-text-muted)' }}>
-          {title}
-        </Text>
-        <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>{total}</Text>
-      </Flex>
-      {stats.length === 0 ? (
-        <Text fontSize="xs" style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-          {emptyHint}
-        </Text>
-      ) : (
-        <Box>
-          {stats.map((d, i) => (
-            <Flex
-              key={`${d.color}:${d.icon}:${d.label}:${i}`}
-              align="center" gap={2}
-              style={{ height: '18px', lineHeight: '18px' }}
-            >
-              <Box flexShrink={0} style={{ display: 'flex', alignItems: 'center', lineHeight: 0 }}>
-                <PinIcon color={d.color} icon={d.icon} size={14} />
-              </Box>
-              <Text fontSize="13px" flex={1} noOfLines={1} style={{ color: 'var(--color-text-secondary)', lineHeight: '18px' }}>
-                {d.label}
-              </Text>
-              <Text fontSize="13px" fontWeight={700} style={{ color: 'var(--color-text-primary)', lineHeight: '18px' }}>
-                {d.count}
-              </Text>
-            </Flex>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
 }
 
 // ── Pin Modal (Add & Edit) ────────────────────────────────────────────────────
@@ -723,8 +682,15 @@ export default function MapPage({ params }) {
   const [playthroughs, setPlaythroughs] = useState([]);
   const [mapsByPt,     setMapsByPt]     = useState({});
   const [pinsByMap,    setPinsByMap]    = useState({});
-  const [mapDefaults,  setMapDefaults]  = useState([]); // [{ icon, color, label }]
+  const [mapDefaults,  setMapDefaults]  = useState([]); // [{ icon, color, label, category, trackable }]
   const [loading,      setLoading]      = useState(true);
+
+  // ── Legend / visibility state ───────────────────────────────────────────────
+  const [hiddenTypes, setHiddenTypes] = useState(() => new Set()); // "color:icon" keys hidden on the map
+  const [legendScope, setLegendScope] = useState('map');  // 'map' | 'pt' — which counts the legend shows
+  const [legendQuery, setLegendQuery] = useState('');     // legend search text
+  const [mapsOpen,    setMapsOpen]    = useState(true);   // sidebar "Maps" section expanded
+  const [legendOpen,  setLegendOpen]  = useState(true);   // sidebar "Legend" section expanded
 
   // ── Active selection (persisted via TabStateContext) ────────────────────────
   const [openPinId, setOpenPinId] = useState(null);
@@ -750,6 +716,7 @@ export default function MapPage({ params }) {
   // ── Pin dragging (pin mode only) ────────────────────────────────────────────
   const [draggingPin,  setDraggingPin]  = useState(null); // { pinId, x_percent, y_percent }
   const draggingRef = useRef(null); // mirrors draggingPin for event handlers
+  const justDraggedRef = useRef(false); // true right after a move, to swallow the trailing click
 
   // ── Path drawing ───────────────────────────────────────────────────────────
   // Only one path at a time; stored as array of { x_percent, y_percent, id }
@@ -822,13 +789,33 @@ export default function MapPage({ params }) {
 
   useEffect(() => { getApiBase().then(setApiBase).catch(() => {}); }, []);
 
-  // ── Load the per-game map defaults (type:color:label) from settings ─────────
+  // ── Load the per-game map defaults (type:color:label:category:trackable) ─────
   useEffect(() => {
     if (!user) return;
     api.settings.get(`map_defaults_${id}`)
       .then(val => setMapDefaults(Array.isArray(val) ? val : []))
       .catch(() => {});
   }, [id, user]);
+
+  // ── Load the per-game hidden pin types from settings ────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    api.settings.get(`map_hidden_types_${id}`)
+      .then(val => setHiddenTypes(new Set(Array.isArray(val) ? val : [])))
+      .catch(() => {});
+  }, [id, user]);
+
+  // Persist the hidden-types set (per game) and update local state in one step.
+  const applyHiddenTypes = (nextSet) => {
+    setHiddenTypes(nextSet);
+    api.settings.set(`map_hidden_types_${id}`, [...nextSet]).catch(() => {});
+  };
+
+  const toggleTypeHidden = (key) => {
+    const next = new Set(hiddenTypes);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    applyHiddenTypes(next);
+  };
 
   // ── Select a map — loads its pins ──────────────────────────────────────────
   const selectMap = async (ptId, map, currentMapsByPt = mapsByPt) => {
@@ -1006,6 +993,22 @@ export default function MapPage({ params }) {
     }
   };
 
+  // ── Right-click anywhere on the map to add a pin (no tool mode needed) ───────
+  const handleMapContextMenu = (e) => {
+    if (!imgRef.current || !activeMap) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width)  * 100;
+    const y = ((e.clientY - rect.top)  / rect.height) * 100;
+    // Only intercept right-clicks that land on the map image itself.
+    if (x < 0 || x > 100 || y < 0 || y > 100) return;
+    e.preventDefault();
+    setOpenPinId(null);
+    setActivePinId(null);
+    setEditingPin(null);
+    setPendingPin({ x_percent: x, y_percent: y });
+    setShowPinModal(true);
+  };
+
   // ── Save pin from modal ─────────────────────────────────────────────────────
   const handleAddPin = async ({ label, description, color }) => {
     try {
@@ -1049,6 +1052,49 @@ export default function MapPage({ params }) {
     setEditingPin(pin);
   };
 
+  // ── Save an inline-edited pin note/description (from the bubble) ────────────
+  const handleSaveDescription = async (pin, text) => {
+    const next = (text || '').trim();
+    if (next === (pin.description || '')) return; // unchanged
+    setPinsByMap(prev => ({
+      ...prev,
+      [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, description: next || null } : p),
+    }));
+    try {
+      await api.pins.update(activeMap.id, pin.id, {
+        label: pin.label, description: next || null, color: pin.color,
+      });
+    } catch (err) {
+      setPinsByMap(prev => ({
+        ...prev,
+        [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, description: pin.description } : p),
+      }));
+      toast({ title: 'Failed to save note', description: err.message, status: 'error', duration: 3000 });
+    }
+  };
+
+  // ── Toggle a pin's "found" progress flag (trackable types only) ─────────────
+  const handleToggleFound = async (pin) => {
+    const next = !pin.found;
+    // Optimistic local update
+    setPinsByMap(prev => ({
+      ...prev,
+      [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, found: next } : p),
+    }));
+    try {
+      await api.pins.update(activeMap.id, pin.id, {
+        label: pin.label, description: pin.description, color: pin.color, found: next,
+      });
+    } catch (err) {
+      // Revert on failure
+      setPinsByMap(prev => ({
+        ...prev,
+        [activeMap.id]: (prev[activeMap.id] || []).map(p => p.id === pin.id ? { ...p, found: pin.found } : p),
+      }));
+      toast({ title: 'Failed to update progress', description: err.message, status: 'error', duration: 3000 });
+    }
+  };
+
   // ── Delete pin ──────────────────────────────────────────────────────────────
   const handleDeletePin = async (pinId) => {
     try {
@@ -1064,11 +1110,14 @@ export default function MapPage({ params }) {
     }
   };
 
-  // ── Pin drag (pin mode only) ────────────────────────────────────────────────
+  // ── Pin drag ────────────────────────────────────────────────────────────────
+  // Works in "pin" tool mode and for the currently-selected pin in normal mode.
+  // Movement is tracked so a plain click (no drag) neither saves nor is mistaken
+  // for a drag by the click handler.
   const handlePinDragStart = (e, pin) => {
     e.stopPropagation();
     e.preventDefault();
-    const info = { pinId: pin.id, x_percent: pin.x_percent, y_percent: pin.y_percent };
+    const info = { pinId: pin.id, x_percent: pin.x_percent, y_percent: pin.y_percent, moved: false };
     draggingRef.current = info;
     setDraggingPin(info);
   };
@@ -1078,7 +1127,7 @@ export default function MapPage({ params }) {
     const rect = imgRef.current.getBoundingClientRect();
     const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width)  * 100));
     const y = Math.min(100, Math.max(0, ((e.clientY - rect.top)  / rect.height) * 100));
-    const updated = { ...draggingRef.current, x_percent: x, y_percent: y };
+    const updated = { ...draggingRef.current, x_percent: x, y_percent: y, moved: true };
     draggingRef.current = updated;
     setDraggingPin({ ...updated });
     setPinsByMap(prev => ({
@@ -1091,9 +1140,13 @@ export default function MapPage({ params }) {
 
   const handleContainerMouseUp = async () => {
     if (!draggingRef.current) return;
-    const { pinId, x_percent, y_percent } = draggingRef.current;
+    const { pinId, x_percent, y_percent, moved } = draggingRef.current;
     draggingRef.current = null;
     setDraggingPin(null);
+    // A click without movement isn't a move — don't persist, and let the click
+    // handler run normally.
+    if (!moved) return;
+    justDraggedRef.current = true; // suppress the click that follows the drag
     try {
       const pin = (pinsByMap[activeMap.id] || []).find(p => p.id === pinId);
       if (!pin) return;
@@ -1143,43 +1196,90 @@ export default function MapPage({ params }) {
   );
 
   const activePins = activeMap ? (pinsByMap[activeMap.id] || []) : [];
+  const currentPtPins = (mapsByPt[activePtId] || []).flatMap(m => pinsByMap[m.id] || []);
 
-  // ── Pin statistics ──────────────────────────────────────────────────────────
-  // Computed for two scopes: the current map, and the current playthrough (all
-  // maps under it). Each scope splits into:
-  //   Defaults — each configured default marker and how many pins match its
-  //              color:icon (e.g. "Rare Item A : 6").
-  //   Other    — every remaining pin whose color:icon is NOT a configured
-  //              default, grouped by label.
-  const computeStats = (pins) => {
-    const defaultStats = mapDefaults.map(d => ({
-      ...d,
-      count: pins.filter(p => {
-        const s = parsePinStyle(p.color);
-        return s.color === d.color && s.icon === d.icon;
-      }).length,
-    }));
+  const typeKey = (color, icon) => `${color}:${icon}`;
 
-    const defaultKeys = new Set(mapDefaults.map(d => `${d.color}:${d.icon}`));
-    const nonDefaultStats = Object.values(
-      pins.reduce((acc, p) => {
-        const s = parsePinStyle(p.color);
-        if (defaultKeys.has(`${s.color}:${s.icon}`)) return acc;
-        const key = `${s.color}:${s.icon}:${p.label}`;
-        if (!acc[key]) acc[key] = { icon: s.icon, color: s.color, label: p.label, count: 0 };
-        acc[key].count++;
-        return acc;
-      }, {})
-    ).sort((a, b) => b.count - a.count);
+  // Pin types configured as progress-trackable (Settings → "Track").
+  const trackableKeys = new Set(
+    mapDefaults.filter(d => d.trackable).map(d => typeKey(d.color, d.icon))
+  );
 
-    return { defaultStats, nonDefaultStats };
+  // ── Legend data ───────────────────────────────────────────────────────────
+  // One entry per pin *type* (color:icon): every configured default (even when
+  // count is 0) plus any non-default type actually present, tallied for the given
+  // pin set. Each entry carries count and "found" (for trackable types).
+  const OTHER_CAT = 'OTHER';
+  const buildLegend = (pins) => {
+    const defaultKeys = new Set(mapDefaults.map(d => typeKey(d.color, d.icon)));
+    const tally = new Map(); // key -> { count, found, labels:Map, color, icon }
+    pins.forEach(p => {
+      const s = parsePinStyle(p.color);
+      const key = typeKey(s.color, s.icon);
+      if (!tally.has(key)) tally.set(key, { count: 0, found: 0, labels: new Map(), color: s.color, icon: s.icon });
+      const t = tally.get(key);
+      t.count++;
+      if (p.found) t.found++;
+      t.labels.set(p.label, (t.labels.get(p.label) || 0) + 1);
+    });
+
+    const entries = [];
+    mapDefaults.forEach(d => {
+      const key = typeKey(d.color, d.icon);
+      const t = tally.get(key);
+      entries.push({
+        key, color: d.color, icon: d.icon,
+        name: d.label,
+        category: (d.category || '').trim() || OTHER_CAT,
+        trackable: !!d.trackable,
+        count: t ? t.count : 0,
+        found: t ? t.found : 0,
+      });
+    });
+    tally.forEach((t, key) => {
+      if (defaultKeys.has(key)) return;
+      let name = ''; let max = -1;
+      t.labels.forEach((n, lbl) => { if (n > max) { max = n; name = lbl; } });
+      entries.push({
+        key, color: t.color, icon: t.icon, name,
+        category: OTHER_CAT, trackable: false,
+        count: t.count, found: 0,
+      });
+    });
+    return entries;
   };
 
-  const currentPtPins = (mapsByPt[activePtId] || []).flatMap(m => pinsByMap[m.id] || []);
-  const mapStats = computeStats(activePins);
-  const ptStats  = computeStats(currentPtPins);
+  const legendPins    = legendScope === 'pt' ? currentPtPins : activePins;
+  const legendEntries = buildLegend(legendPins);
+  const allTypeKeys   = legendEntries.map(e => e.key);
 
-  const hasStats = mapDefaults.length > 0 || currentPtPins.length > 0;
+  // Category order = first appearance in mapDefaults, OTHER always last.
+  const catOrder = [];
+  mapDefaults.forEach(d => {
+    const c = (d.category || '').trim() || OTHER_CAT;
+    if (c !== OTHER_CAT && !catOrder.includes(c)) catOrder.push(c);
+  });
+  catOrder.push(OTHER_CAT);
+
+  const q = legendQuery.trim().toLowerCase();
+  const legendGroups = catOrder
+    .map(cat => ({
+      category: cat,
+      rows: legendEntries.filter(e =>
+        e.category === cat &&
+        (!q || e.name.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
+      ),
+    }))
+    .filter(g => g.rows.length > 0);
+
+  const showAllTypes = () => applyHiddenTypes(new Set());
+  const hideAllTypes = () => applyHiddenTypes(new Set(allTypeKeys));
+
+  // Pins visible on the canvas after applying the per-type visibility filter.
+  const visibleActivePins = activePins.filter(p => {
+    const s = parsePinStyle(p.color);
+    return !hiddenTypes.has(typeKey(s.color, s.icon));
+  });
 
   // Build SVG polyline points string from waypoints
   const buildPolylinePoints = (waypoints, containerRect) => {
@@ -1201,25 +1301,101 @@ export default function MapPage({ params }) {
       <GameTabBar gameId={id} ptId={activePtId || initialPtId} hasPlaythroughs={loading || playthroughs.length > 0} />
       <RecentDrawer isOpen={recentOpen} onToggle={() => setRecentOpen(o => !o)} />
 
-      <div className="notes-workspace">
+      <div className="notes-workspace map-workspace">
 
-        {/* ── Left: Sidebar ── */}
+        {/* ── Left: collapsible Maps + Legend sidebar ── */}
         {loading ? null : (
-          <Sidebar
-            game={game}
-            playthroughs={playthroughs}
-            mapsByPt={mapsByPt}
-            pinsByMap={pinsByMap}
-            activeMapId={activeMap?.id}
-            activePinId={activePinId}
-            onSelectMap={selectMap}
-            onSelectPin={handleSelectPin}
-            onNewMap={(ptId) => setNewMapPtId(ptId)}
-            onDeleteMap={handleDeleteMap}
-            initialPtId={initialPtId}
-            onOpenGame={() => setGameModalOpen(true)}
-            gameId={id}
-          />
+          <div className="map-sidebar">
+
+            {/* MAPS section — playthrough → map tree */}
+            <div className={`map-sidebar-section${mapsOpen ? ' open' : ''}`}>
+              <button className="map-sidebar-section-header" onClick={() => setMapsOpen(o => !o)}>
+                {mapsOpen ? <ChevronDownIcon boxSize={3} /> : <ChevronRightIcon boxSize={3} />}
+                <FiFolder size={12} />
+                <span>Maps</span>
+              </button>
+              {mapsOpen && (
+                <div className="map-sidebar-section-body map-sidebar-maps">
+                  <Sidebar
+                    game={game}
+                    playthroughs={playthroughs}
+                    mapsByPt={mapsByPt}
+                    pinsByMap={pinsByMap}
+                    activeMapId={activeMap?.id}
+                    activePinId={activePinId}
+                    onSelectMap={selectMap}
+                    onSelectPin={handleSelectPin}
+                    onNewMap={(ptId) => setNewMapPtId(ptId)}
+                    onDeleteMap={handleDeleteMap}
+                    initialPtId={initialPtId}
+                    onOpenGame={() => setGameModalOpen(true)}
+                    gameId={id}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* LEGEND section — pin types, visibility, progress */}
+            <div className={`map-sidebar-section${legendOpen ? ' open' : ''}`}>
+              <button className="map-sidebar-section-header" onClick={() => setLegendOpen(o => !o)}>
+                {legendOpen ? <ChevronDownIcon boxSize={3} /> : <ChevronRightIcon boxSize={3} />}
+                <FiList size={12} />
+                <span>Legend</span>
+              </button>
+              {legendOpen && (
+                <div className="map-sidebar-section-body">
+                  <div className="map-legend-header">
+                    <div className="map-legend-actions">
+                      <button className="map-legend-action" onClick={showAllTypes}>SHOW ALL</button>
+                      <button className="map-legend-action" onClick={hideAllTypes}>HIDE ALL</button>
+                    </div>
+                    <input
+                      className="map-legend-search"
+                      placeholder="Search…"
+                      value={legendQuery}
+                      onChange={e => setLegendQuery(e.target.value)}
+                    />
+                    <div className="map-legend-scope">
+                      <button className={legendScope === 'map' ? 'active' : ''} onClick={() => setLegendScope('map')}>Map</button>
+                      <button className={legendScope === 'pt'  ? 'active' : ''} onClick={() => setLegendScope('pt')}>Playthrough</button>
+                    </div>
+                    <div className="map-legend-tip">Tip: right-click the map to add a pin.</div>
+                  </div>
+
+                  <div className="map-legend-body">
+                    {legendGroups.length === 0 ? (
+                      <div className="map-legend-empty">
+                        No pin types yet. Configure default markers in Settings, or place pins on the map.
+                      </div>
+                    ) : legendGroups.map(group => (
+                      <div key={group.category} className="map-legend-group">
+                        <div className="map-legend-cat">{group.category}</div>
+                        {group.rows.map(row => {
+                          const hidden = hiddenTypes.has(row.key);
+                          return (
+                            <button
+                              key={row.key}
+                              className={`map-legend-row${hidden ? ' map-legend-row--hidden' : ''}`}
+                              onClick={() => toggleTypeHidden(row.key)}
+                              title={hidden ? 'Hidden — click to show' : 'Click to hide'}
+                            >
+                              <span className="map-legend-row-icon">
+                                <PinIcon color={row.color} icon={row.icon} size={16} />
+                              </span>
+                              <span className="map-legend-row-name">{row.name || '(unnamed)'}</span>
+                              <span className="map-legend-row-count">
+                                {row.trackable ? `${row.found}/${row.count}` : row.count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* ── Right: Canvas area ── */}
@@ -1283,63 +1459,6 @@ export default function MapPage({ params }) {
                         />
                       </Tooltip>
 
-                      {/* Pin statistics */}
-                      {hasStats && (
-                        <Popover placement="bottom-start" closeOnBlur>
-                          <PopoverTrigger>
-                            <Box as="span" display="inline-flex">
-                              <Tooltip label="Pin statistics" hasArrow placement="bottom" openDelay={300}>
-                                <IconButton
-                                  icon={<FiBarChart2 size={15} />}
-                                  size="xs"
-                                  aria-label="Pin statistics"
-                                  style={{
-                                    background: 'var(--color-bg-subtle)',
-                                    color: 'var(--color-text-secondary)',
-                                    border: '1px solid var(--color-border)',
-                                  }}
-                                />
-                              </Tooltip>
-                            </Box>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="map-pin-popover"
-                            style={{ color: 'var(--color-text-primary)', width: '400px' }}
-                          >
-                            <PopoverBody py={3} px={3}>
-                              <VStack spacing={3} align="stretch">
-                                {/* Current map */}
-                                <Box>
-                                  <Text fontSize="10px" fontWeight={700} textTransform="uppercase"
-                                    letterSpacing="0.06em" mb={2}
-                                    style={{ color: 'var(--color-text-secondary)' }}>
-                                    Statistics On Current Map
-                                  </Text>
-                                  <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
-                                    <StatColumn title="Defaults" stats={mapStats.defaultStats} emptyHint="None configured." />
-                                    <StatColumn title="Other" stats={mapStats.nonDefaultStats} emptyHint="No other pins." />
-                                  </Box>
-                                </Box>
-
-                                <Box style={{ height: '1px', background: 'var(--color-border)' }} />
-
-                                {/* Current playthrough */}
-                                <Box>
-                                  <Text fontSize="10px" fontWeight={700} textTransform="uppercase"
-                                    letterSpacing="0.06em" mb={2}
-                                    style={{ color: 'var(--color-text-secondary)' }}>
-                                    Statistics On Current Playthrough
-                                  </Text>
-                                  <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
-                                    <StatColumn title="Defaults" stats={ptStats.defaultStats} emptyHint="None configured." />
-                                    <StatColumn title="Other" stats={ptStats.nonDefaultStats} emptyHint="No other pins." />
-                                  </Box>
-                                </Box>
-                              </VStack>
-                            </PopoverBody>
-                          </PopoverContent>
-                        </Popover>
-                      )}
                     </HStack>
                   )}
                 </HStack>
@@ -1359,7 +1478,7 @@ export default function MapPage({ params }) {
                   >
                     <FiMap size={32} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
                     <Text fontSize="sm">No map selected.</Text>
-                    <Text fontSize="xs" mt={1}>Click + on a playthrough in the sidebar to add a map.</Text>
+                    <Text fontSize="xs" mt={1}>In the <strong>Maps</strong> section on the left, click + on a playthrough to add a map.</Text>
                   </Flex>
 
                 ) : (
@@ -1399,9 +1518,10 @@ export default function MapPage({ params }) {
                     <div
                       className="map-container"
                       onClick={handleMapClick}
-                      onMouseMove={toolMode === 'pin' ? handleContainerMouseMove : undefined}
-                      onMouseUp={toolMode === 'pin' ? handleContainerMouseUp : undefined}
-                      onMouseLeave={toolMode === 'pin' ? handleContainerMouseUp : undefined}
+                      onContextMenu={handleMapContextMenu}
+                      onMouseMove={handleContainerMouseMove}
+                      onMouseUp={handleContainerMouseUp}
+                      onMouseLeave={handleContainerMouseUp}
                       style={{ cursor: draggingPin ? 'grabbing' : toolMode !== 'none' ? 'crosshair' : 'default' }}
                     >
                       {/* Resizable wrapper */}
@@ -1530,36 +1650,49 @@ export default function MapPage({ params }) {
                       )}
 
                       {/* Placed pins */}
-                      {disambiguatePinLabels(activePins).map(pin => {
+                      {disambiguatePinLabels(visibleActivePins).map(pin => {
                         const isDragging = draggingPin?.pinId === pin.id;
                         const { color: pinColor, icon: pinIcon } = parsePinStyle(pin.color);
                         const isHovered = openPinId === pin.id;
+                        const isTrackable = trackableKeys.has(typeKey(pinColor, pinIcon));
+                        const isFound = !!pin.found;
+                        // Draggable in pin tool mode, or when this pin is the selected one.
+                        const isDraggable = toolMode === 'pin' || isHovered;
                         return (
                           <div
                             key={pin.id}
-                            className="map-pin"
+                            className={`map-pin${isFound ? ' map-pin--found' : ''}`}
                             style={{
                               left: `${pin.x_percent}%`,
                               top: `${pin.y_percent}%`,
                               transform: 'translate(-50%, -50%)',
-                              cursor: toolMode === 'pin' ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
-                              opacity: isDragging ? 0.85 : 1,
+                              cursor: isDragging ? 'grabbing' : (isDraggable ? 'grab' : 'pointer'),
+                              opacity: isDragging ? 0.85 : (isFound ? 0.45 : 1),
                               filter: isDragging ? 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' : undefined,
                               zIndex: isDragging ? 50 : isHovered ? 30 : undefined,
                             }}
-                            onMouseDown={toolMode === 'pin' ? (e) => { handlePinDragStart(e, pin); setOpenPinId(null); } : undefined}
+                            onMouseDown={isDraggable ? (e) => {
+                              handlePinDragStart(e, pin);
+                              if (toolMode === 'pin') setOpenPinId(null);
+                            } : undefined}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (justDraggedRef.current) { justDraggedRef.current = false; return; }
                               if (toolMode === 'pin') { openEditPin(pin); return; }
                               setOpenPinId(prev => prev === pin.id ? null : pin.id);
                               setActivePinId(pin.id);
                             }}
                           >
                             <PinIcon color={pinColor} icon={pinIcon} />
+                            {/* Found check badge */}
+                            {isFound && (
+                              <span className="map-pin-found-badge"><FiCheck size={9} /></span>
+                            )}
                             {/* Pin tooltip */}
                             {isHovered && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
                                 style={{
                                   position: 'absolute',
                                   bottom: 'calc(100% + 8px)',
@@ -1594,12 +1727,32 @@ export default function MapPage({ params }) {
                                     justifyContent: 'space-between',
                                     gap: '6px',
                                     padding: '4px 4px 4px 8px',
-                                    borderBottom: pin.description ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                                    borderBottom: '1px solid rgba(255,255,255,0.06)',
                                   }}>
                                     <div style={{ fontWeight: 600, fontSize: '10px', lineHeight: 1.3, color: 'rgba(255,255,255,0.95)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                                       {pin.displayLabel}
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                      {isTrackable && (
+                                        <Tooltip label={isFound ? 'Found — click to unmark' : 'Mark as found'} hasArrow placement="top" openDelay={400}>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleToggleFound(pin); }}
+                                            style={{
+                                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                              width: '22px', height: '22px', borderRadius: '4px',
+                                              background: isFound ? 'var(--color-accent)' : 'transparent',
+                                              border: 'none',
+                                              color: isFound ? 'white' : 'rgba(255,255,255,0.45)',
+                                              cursor: 'pointer',
+                                              transition: 'color 0.15s, background 0.15s',
+                                            }}
+                                            onMouseEnter={e => { if (!isFound) { e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; } }}
+                                            onMouseLeave={e => { if (!isFound) { e.currentTarget.style.color = 'rgba(255,255,255,0.45)'; e.currentTarget.style.background = 'transparent'; } }}
+                                          >
+                                            <FiCheck size={11} />
+                                          </button>
+                                        </Tooltip>
+                                      )}
                                       <Tooltip label="Edit" hasArrow placement="top" openDelay={400}>
                                         <button
                                           onClick={(e) => { e.stopPropagation(); openEditPin(pin); }}
@@ -1619,12 +1772,16 @@ export default function MapPage({ params }) {
                                       <HoldToDelete onDelete={() => handleDeletePin(pin.id)} inMap />
                                     </div>
                                   </div>
-                                  {/* Description */}
-                                  {pin.description && (
-                                    <div style={{ fontSize: '9px', lineHeight: 1.4, color: 'rgba(255,255,255,0.5)', padding: '4px 8px 5px', whiteSpace: 'pre-wrap' }}>
-                                      {pin.description}
-                                    </div>
-                                  )}
+                                  {/* Editable description / note */}
+                                  <textarea
+                                    key={pin.id}
+                                    className="map-pin-note"
+                                    defaultValue={pin.description || ''}
+                                    placeholder="Add a note…"
+                                    rows={2}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onBlur={(e) => handleSaveDescription(pin, e.target.value)}
+                                  />
                                 </div>
                                 {/* Arrow */}
                                 <div style={{

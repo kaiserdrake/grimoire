@@ -127,7 +127,13 @@ export default function GameSettingsPage({ params }) {
     const t = setTimeout(async () => {
       try {
         const cleanedDefaults = mapDefaults
-          .map(d => ({ icon: d.icon, color: d.color, label: (d.label || '').trim() }))
+          .map(d => ({
+            icon: d.icon,
+            color: d.color,
+            label: (d.label || '').trim(),
+            category: (d.category || '').trim(),
+            trackable: !!d.trackable,
+          }))
           .filter(d => d.label);
         const cleanedGroups = iconGroups
           .map(g => {
@@ -158,7 +164,7 @@ export default function GameSettingsPage({ params }) {
 
   // ── Map defaults ────────────────────────────────────────────────────────────
   const addDefault = () =>
-    setMapDefaults(prev => [...prev, { icon: PIN_TYPES[0].id, color: PIN_COLORS[0], label: '' }]);
+    setMapDefaults(prev => [...prev, { icon: PIN_TYPES[0].id, color: PIN_COLORS[0], label: '', category: '', trackable: false }]);
   const updateDefault = (idx, patch) =>
     setMapDefaults(prev => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   const removeDefault = (idx) =>
@@ -375,7 +381,7 @@ export default function GameSettingsPage({ params }) {
           <Section
             icon={FiMap}
             title="Map Defaults"
-            description="Map a pin type + color to a default label. In the map editor these appear as one-click markers."
+            description="Map a pin type + color to a default label and category. In the map editor these appear as one-click markers and as the legend. Enable Track to count found/total progress for that type."
           >
             {mapDefaults.length === 0 ? (
               <Text fontSize="xs" mb={2} style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
@@ -386,10 +392,19 @@ export default function GameSettingsPage({ params }) {
                 {/* Header row */}
                 <HStack spacing={2.5} px={1} style={{ color: 'var(--color-text-muted)' }}>
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '140px' }}>Type</Text>
-                  <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '120px' }}>Color</Text>
+                  <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '110px' }}>Color</Text>
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" flex={1}>Label</Text>
+                  <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '130px' }}>Category</Text>
+                  <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '40px', textAlign: 'center' }}>Track</Text>
                   <Box style={{ width: '24px' }} />
                 </HStack>
+
+                {/* Reusable list of existing category names for quick reuse */}
+                <datalist id="map-default-categories">
+                  {[...new Set(mapDefaults.map(d => (d.category || '').trim()).filter(Boolean))].map(c => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
 
                 {mapDefaults.map((d, idx) => (
                   <HStack key={idx} spacing={2.5} align="center">
@@ -410,7 +425,7 @@ export default function GameSettingsPage({ params }) {
                       </Select>
                     </HStack>
                     {/* Color */}
-                    <Box style={{ width: '120px' }}>
+                    <Box style={{ width: '110px' }}>
                       <ColorPicker value={d.color} onChange={c => updateDefault(idx, { color: c })} />
                     </Box>
                     {/* Label */}
@@ -422,6 +437,36 @@ export default function GameSettingsPage({ params }) {
                       placeholder="e.g. Rare Item A"
                       style={{ background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
                     />
+                    {/* Category */}
+                    <Input
+                      size="xs"
+                      style={{ width: '130px', background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                      list="map-default-categories"
+                      value={d.category || ''}
+                      onChange={e => updateDefault(idx, { category: e.target.value })}
+                      placeholder="e.g. Items"
+                    />
+                    {/* Track progress toggle */}
+                    <Tooltip label={d.trackable ? 'Tracking found/total' : 'Track found/total progress'} hasArrow placement="top" openDelay={300}>
+                      <Box
+                        as="button"
+                        type="button"
+                        onClick={() => updateDefault(idx, { trackable: !d.trackable })}
+                        aria-label="Toggle progress tracking"
+                        style={{
+                          width: '40px', height: '24px',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          border: d.trackable ? '1px solid var(--color-accent)' : '1px solid var(--color-border)',
+                          background: d.trackable ? 'var(--color-accent)' : 'var(--color-bg-subtle)',
+                          color: d.trackable ? 'white' : 'var(--color-text-muted)',
+                          transition: 'background 0.1s, border-color 0.1s, color 0.1s',
+                        }}
+                      >
+                        <FiCheck size={13} />
+                      </Box>
+                    </Tooltip>
                     {/* Delete */}
                     <Tooltip label="Remove" hasArrow placement="top" openDelay={300}>
                       <IconButton
