@@ -1217,8 +1217,10 @@ export default function NotesPage({ params }) {
                         icon={<FiCopy size={13} />}
                         size="xs"
                         aria-label="Copy raw markdown URL"
-                        variant="ghost"
-                        style={{ color: 'var(--color-text-muted)' }}
+                        style={{
+                          background: 'var(--color-bg-subtle)',
+                          color: 'var(--color-text-muted)', border: 'none',
+                        }}
                         onClick={async () => {
                           const base = await getApiBase();
                           const url = `${base}/api/note-files/${activeFileId}/raw`;
