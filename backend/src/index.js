@@ -1063,17 +1063,65 @@ app.get('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
   }
 });
 
-// Public raw endpoint — returns note file markdown content as plain text (no auth required)
+// Public raw endpoint — returns note file markdown content as plain text (no auth required).
+// :icon[token] references are expanded to ![token](url) so they render in external viewers.
 app.get('/api/note-files/:fileId/raw', async (req, res) => {
   const { fileId } = req.params;
   try {
     const result = await query(
-      'SELECT content FROM note_files WHERE id=$1',
+      `SELECT nf.content, p.game_id, p.user_id
+       FROM note_files nf
+       JOIN playthroughs p ON p.id = nf.playthrough_id
+       WHERE nf.id=$1`,
       [fileId]
     );
     if (result.rows.length === 0) return res.status(404).send('Not found.');
+
+    let { content, game_id, user_id } = result.rows[0];
+    content = content ?? '';
+
+    // Only attempt icon expansion if the content actually contains :icon[
+    if (content.includes(':icon[')) {
+      try {
+        const settingResult = await query(
+          'SELECT value FROM user_settings WHERE user_id=$1 AND key=$2',
+          [user_id, `note_icons_${game_id}`]
+        );
+        const groups = settingResult.rows[0]?.value;
+        if (Array.isArray(groups) && groups.length > 0) {
+          const apiBase = process.env.API_PUBLIC_URL || `${req.protocol}://${req.headers.host}`;
+          // Build token -> url map (mirrors frontend buildIconMap logic)
+          const iconMap = {};
+          const pad2 = (n) => String(n).padStart(2, '0');
+          const slugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+          groups.forEach(g => {
+            const used = new Set();
+            (g.icons || []).map((icon, i) => {
+              const raw = typeof icon === 'string' ? { url: icon, name: '', code: pad2(i + 1) } : icon;
+              const base = slugify(raw.code) || pad2(i + 1);
+              let resolved = base; let k = 2;
+              while (used.has(resolved)) { resolved = `${base}_${k}`; k++; }
+              used.add(resolved);
+              return { url: raw.url || '', resolved };
+            }).forEach(({ url, resolved }) => {
+              if (!url) return;
+              const token = `${slugify(g.name)}_${resolved}`;
+              const src = url.startsWith('http') ? url : `${apiBase}${url}`;
+              iconMap[token] = src;
+            });
+          });
+          content = content.replace(/:icon\[([a-zA-Z0-9_]+)\]/g, (match, token) => {
+            const src = iconMap[token.toLowerCase()];
+            return src ? `![${token}](${src})` : match;
+          });
+        }
+      } catch {
+        // Icon resolution is best-effort; serve raw content on any error
+      }
+    }
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send(result.rows[0].content ?? '');
+    res.send(content);
   } catch (err) {
     res.status(500).send('Server error.');
   }
