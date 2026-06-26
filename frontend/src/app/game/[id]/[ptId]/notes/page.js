@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -1211,6 +1211,27 @@ export default function NotesPage({ params }) {
                   >
                     Pin
                   </Button>
+                  {isPresentMode && activeFileId != null && (
+                    <Tooltip label="Copy raw markdown URL">
+                      <IconButton
+                        icon={<FiCopy size={13} />}
+                        size="xs"
+                        aria-label="Copy raw markdown URL"
+                        variant="ghost"
+                        style={{ color: 'var(--color-text-muted)' }}
+                        onClick={async () => {
+                          const base = await getApiBase();
+                          const url = `${base}/api/note-files/${activeFileId}/raw`;
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            toast({ title: 'URL copied', status: 'success', duration: 2000, isClosable: true });
+                          } catch {
+                            toast({ title: 'Copy failed', status: 'error', duration: 2000, isClosable: true });
+                          }
+                        }}
+                      />
+                    </Tooltip>
+                  )}
                   <Button size="xs"
                     leftIcon={isPresentMode ? <FiUnlock size={11} /> : <FiLock size={11} />}
                     onClick={toggleLocked}

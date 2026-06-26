@@ -1063,6 +1063,22 @@ app.get('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
   }
 });
 
+// Public raw endpoint — returns note file markdown content as plain text (no auth required)
+app.get('/api/note-files/:fileId/raw', async (req, res) => {
+  const { fileId } = req.params;
+  try {
+    const result = await query(
+      'SELECT content FROM note_files WHERE id=$1',
+      [fileId]
+    );
+    if (result.rows.length === 0) return res.status(404).send('Not found.');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(result.rows[0].content ?? '');
+  } catch (err) {
+    res.status(500).send('Server error.');
+  }
+});
+
 // Update a note file (title and/or content)
 app.put('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
   const { fileId } = req.params;
