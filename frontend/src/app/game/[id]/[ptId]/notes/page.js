@@ -706,8 +706,27 @@ export default function NotesPage({ params }) {
   const setContent      = (val) => setNotesState((s) => ({ ...s, content: val }));
   const setSaved        = (val) => setNotesState((s) => ({ ...s, saved: val }));
 
+  const [activeLine, setActiveLine]       = useState(null);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+
+  const saveTimer        = useRef(null);
+  const textareaRef      = useRef(null);
+  const previewRef       = useRef(null);
+  const lastNavSlug      = useRef(null); // last heading slug auto-scrolled from the URL
+  const contentRef       = useRef(content); // kept in sync below — lets markdownComponents read latest content without being a dep
+  const isPresentModeRef = useRef(false);
+
+  // Keep contentRef current so markdownComponents can read it without being recreated.
+  contentRef.current = content;
+
   // Lock state is per active note file.
-  const isPresentMode = !!(activeFileId != null && lockedFiles[activeFileId]);
+  // While a new file is loading, keep the previous file's lock state so the
+  // editor/preview layout doesn't flash between modes before content arrives.
+  const isPresentMode = isLoadingFile
+    ? isPresentModeRef.current
+    : !!(activeFileId != null && lockedFiles[activeFileId]);
+  if (!isLoadingFile) isPresentModeRef.current = isPresentMode;
+
   const toggleLocked = () => {
     if (activeFileId == null) return;
     setLockedFiles((prev) => {
@@ -718,13 +737,6 @@ export default function NotesPage({ params }) {
       return next;
     });
   };
-
-  const saveTimer   = useRef(null);
-  const textareaRef = useRef(null);
-  const previewRef  = useRef(null);
-  const lastNavSlug = useRef(null); // last heading slug auto-scrolled from the URL
-
-  const [activeLine, setActiveLine] = useState(null);
 
   const isDirty = content !== saved;
 
@@ -830,6 +842,7 @@ export default function NotesPage({ params }) {
   const openFile = async (ptId, fileId) => {
     clearTimeout(saveTimer.current);
     if (isDirty && activeFileId) { await api.noteFiles.save(activeFileId, { content }); setSaved(content); }
+    setIsLoadingFile(true);
     setActivePtId(ptId);
     setActiveFileId(fileId);
     // Write fileId to the URL so users can copy the address bar to deep-link.
@@ -845,6 +858,8 @@ export default function NotesPage({ params }) {
       setSaved(file.content || '');
     } catch (err) {
       toast({ title: 'Failed to open file', description: err.message, status: 'error', duration: 3000 });
+    } finally {
+      setIsLoadingFile(false);
     }
   };
 
@@ -1077,7 +1092,7 @@ export default function NotesPage({ params }) {
           <TierList
             raw={raw}
             iconMap={iconMap}
-            headings={extractHeadings(content).map(h => ({ ...h, slug: slugify(h.text) }))}
+            headings={extractHeadings(contentRef.current).map(h => ({ ...h, slug: slugify(h.text) }))}
             position={node.position}
             onPersist={persistTierBlock}
             onNavigateSection={navigateSection}
@@ -1086,7 +1101,7 @@ export default function NotesPage({ params }) {
       }
       return <pre {...props}>{children}</pre>;
     },
-  }), [iconMap, searchParams, content, persistTierBlock, navigateSection]);
+  }), [iconMap, searchParams, persistTierBlock, navigateSection]);
 
   if (!user) return (
     <>
@@ -1209,7 +1224,7 @@ export default function NotesPage({ params }) {
               </div>
 
               {/* ── Split pane: editor left, preview right ── */}
-              <div className="notes-split-pane">
+              <div className="notes-split-pane" style={isLoadingFile ? { opacity: 0, pointerEvents: 'none' } : undefined}>
                 {!isPresentMode && <div className="notes-editor-body">
                   <MarkdownToolbar
                     textareaRef={textareaRef}

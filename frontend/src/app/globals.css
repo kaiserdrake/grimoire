@@ -454,6 +454,7 @@ body {
   flex: 1;
   overflow: hidden;
   position: relative;
+  transition: opacity 0.1s ease;
 }
 
 .notes-split-divider {
