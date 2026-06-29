@@ -640,6 +640,86 @@ tr.notes-preview-line-active th:first-child {
 .md-table-search:focus { border-color: var(--color-accent); }
 .md-table-search::placeholder { color: var(--color-text-muted); }
 
+/* Frontmatter "Properties" panel — collapsible metadata table (see utils/frontmatter.js) */
+.note-frontmatter {
+  margin: 0 0 1em;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  overflow: hidden;
+}
+.note-frontmatter > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.5em 0.75em;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+}
+.note-frontmatter > summary::-webkit-details-marker { display: none; }
+.note-frontmatter-caret {
+  width: 0.45em;
+  height: 0.45em;
+  border: solid var(--color-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.note-frontmatter[open] > summary .note-frontmatter-caret { transform: rotate(45deg); }
+.note-frontmatter-count {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+.note-frontmatter table { width: 100%; margin: 0; border-collapse: collapse; }
+.note-frontmatter td {
+  border: none;
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 0.45em 0.75em;
+  font-size: 0.82rem;
+  white-space: normal;
+  vertical-align: top;
+  text-align: left;
+}
+.note-frontmatter tbody tr:first-child td { border-top: none; }
+.note-frontmatter td.note-frontmatter-key {
+  width: 1%;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+.note-frontmatter-pills { display: inline-flex; flex-wrap: wrap; gap: 0.3em; }
+.note-frontmatter-pill {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  border-radius: 999px;
+  padding: 0.1em 0.6em;
+  font-size: 0.78rem;
+}
+.note-frontmatter-bool {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-status-bg-completed);
+  color: var(--color-success);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.05em 0.5em;
+  font-size: 0.78rem;
+}
+.note-frontmatter-bool[data-value="true"] {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}
+.note-frontmatter-muted { color: var(--color-text-muted); }
+.note-frontmatter table.note-frontmatter-subtable { width: auto; }
+.note-frontmatter .note-frontmatter-subtable td { border: none; padding: 0.1em 0.6em 0.1em 0; }
+
 /* Resizable images in notes preview */
 .notes-preview-content img:not(.gp-img):not(.note-icon) {
   max-width: 100%;

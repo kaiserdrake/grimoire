@@ -11,7 +11,11 @@ import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
 import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkDirective from 'remark-directive';
+import remarkFrontmatter from 'remark-frontmatter';
 import rehypeRaw from 'rehype-raw';
+import { makeRemarkMetaPlugin } from '@/utils/metaBlocks';
+import { makeRemarkFrontmatterPlugin } from '@/utils/frontmatter';
 
 // ── RecentDrawer ───────────────────────────────────────────────────────────────
 // Pull-tab drawer anchored to the bottom-right of the viewport.
@@ -430,7 +434,7 @@ function BulletinReadModal({ post, loading, onClose }) {
 
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkSearchableTablePlugin()]}
+              remarkPlugins={[remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkSearchableTablePlugin()]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (

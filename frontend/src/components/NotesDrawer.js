@@ -11,7 +11,11 @@ import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
 import { RecentGameRow } from './RecentDrawer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkDirective from 'remark-directive';
+import remarkFrontmatter from 'remark-frontmatter';
 import rehypeRaw from 'rehype-raw';
+import { makeRemarkMetaPlugin } from '@/utils/metaBlocks';
+import { makeRemarkFrontmatterPlugin } from '@/utils/frontmatter';
 
 // ── NotesDrawer ────────────────────────────────────────────────────────────────
 // Three tabs: RECENT, BULLETIN, CONTENTS (heading TOC).
@@ -397,7 +401,7 @@ function BulletinReadModal({ post, loading, onClose }) {
             <div style={{ color: 'var(--color-text-muted)', fontStyle: 'italic', fontSize: '0.875rem' }}>Loading…</div>
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, makeRemarkGamepadPlugin(gamepad)]}
+              remarkPlugins={[remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkGamepadPlugin(gamepad)]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (

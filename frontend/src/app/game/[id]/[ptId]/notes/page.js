@@ -13,6 +13,8 @@ import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkDirective from 'remark-directive';
+import remarkFrontmatter from 'remark-frontmatter';
 import rehypeRaw from 'rehype-raw';
 import Navbar from '@/components/Navbar';
 import GameDetailModal from '@/components/GameDetailModal';
@@ -29,6 +31,8 @@ import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
 import { makeRemarkNoteIconPlugin, buildIconMap, iconTokenFor, normalizeIcon } from '@/utils/noteIcons';
 import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
+import { makeRemarkMetaPlugin } from '@/utils/metaBlocks';
+import { makeRemarkFrontmatterPlugin } from '@/utils/frontmatter';
 import SearchableTable from '@/components/SearchableTable';
 import { slugify, rehypeHeadingIds, withHeadingSlugs } from '@/utils/headings';
 import TierList from '@/components/TierList';
@@ -1033,7 +1037,7 @@ export default function NotesPage({ params }) {
   // SearchableTable), which would wipe a table's active filter on every cell click.
   // These hooks must run before any early return below to satisfy the Rules of Hooks.
   const remarkPlugins = useMemo(
-    () => [remarkGfm, makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()],
+    () => [remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()],
     [gamepad, iconMap],
   );
   const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds], []);
@@ -1076,6 +1080,11 @@ export default function NotesPage({ params }) {
       <div className="img-resizer"><img {...props} /></div>
     ),
     table: ({ node, ...props }) => {
+      // The frontmatter properties panel renders a plain table — keep it out of
+      // the searchable-table flow so it doesn't consume a `st` index.
+      if (typeof props.className === 'string' && props.className.includes('note-frontmatter')) {
+        return <table {...props} />;
+      }
       const idx = ++tableCounterRef.current;
       // Tables are keyed st1, st2, … by their order on the page. Accept a bare
       // `st` as a convenience alias for the first table.
