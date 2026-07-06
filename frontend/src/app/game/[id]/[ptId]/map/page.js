@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Flex, HStack, VStack, Text, Button, Spinner, useToast, IconButton,
   Box, Input, Popover, PopoverTrigger, PopoverContent,
@@ -20,6 +20,7 @@ import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
 import GameTabBar from '@/components/GameTabBar';
 import CameraCapture from '@/components/CameraCapture';
+import SidebarSortControl, { useSidebarSort } from '@/components/SidebarSortControl';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -360,6 +361,7 @@ function Sidebar({
   activeMapId, activePinId,
   onSelectMap, onSelectPin, onNewMap, onDeleteMap,
   initialPtId, onOpenGame, gameId,
+  sort, onToggleSortMode, onToggleSortDir,
 }) {
   const router = useRouter();
   const [expandedPts,  setExpandedPts]  = useState({});
@@ -381,6 +383,7 @@ function Sidebar({
           <FiFolder size={13} style={{ flexShrink: 0, color: 'var(--color-accent)' }} />
           <span className="notes-sidebar-title-text">{game?.title ?? '…'}</span>
         </button>
+        <SidebarSortControl sort={sort} onToggleMode={onToggleSortMode} onToggleDir={onToggleSortDir} />
       </div>
 
       {/* Tree */}
@@ -682,6 +685,30 @@ export default function MapPage({ params }) {
   const [playthroughs, setPlaythroughs] = useState([]);
   const [mapsByPt,     setMapsByPt]     = useState({});
   const [pinsByMap,    setPinsByMap]    = useState({});
+  const { sort: mapSort, toggleMode: toggleSortMode, toggleDir: toggleSortDir, sortItems: sortMaps } =
+    useSidebarSort('grimoire:mapsSort');
+
+  // Sidebar map lists under the user's chosen sort (recent/alphabetical, asc/desc).
+  const sortedMapsByPt = useMemo(() => {
+    const out = {};
+    for (const ptId of Object.keys(mapsByPt)) {
+      out[ptId] = sortMaps(mapsByPt[ptId], m => m.name, m => m.updated_at ?? m.created_at);
+    }
+    return out;
+  }, [mapsByPt, sortMaps]);
+
+  // Bump a map's modified date locally so "recent" sorting reflects pin/image edits
+  // without a refetch (the backend bumps updated_at on the same operations).
+  const touchMap = (mapId) => {
+    const now = new Date().toISOString();
+    setMapsByPt(prev => {
+      const next = {};
+      for (const ptId of Object.keys(prev)) {
+        next[ptId] = prev[ptId].map(m => m.id === mapId ? { ...m, updated_at: now } : m);
+      }
+      return next;
+    });
+  };
   const [mapDefaults,  setMapDefaults]  = useState([]); // [{ icon, color, label, category, trackable }]
   const [loading,      setLoading]      = useState(true);
 
@@ -774,7 +801,8 @@ export default function MapPage({ params }) {
         } else {
           const initialPt = pts.find(p => String(p.id) === String(initialPtId)) ?? pts[0];
           if (initialPt) {
-            const firstMap = byPt[initialPt.id]?.[0];
+            // Open whichever map the sidebar will show first under the current sort.
+            const firstMap = sortMaps(byPt[initialPt.id] || [], m => m.name, m => m.updated_at ?? m.created_at)[0];
             if (firstMap) await selectMap(initialPt.id, firstMap, byPt);
           }
         }
@@ -929,7 +957,7 @@ export default function MapPage({ params }) {
       setMapsByPt(prev => {
         const next = { ...prev };
         for (const ptId of Object.keys(next)) {
-          next[ptId] = next[ptId].map(m => m.id === mapId ? { ...m, image_url: newImageUrl } : m);
+          next[ptId] = next[ptId].map(m => m.id === mapId ? { ...m, image_url: newImageUrl, updated_at: new Date().toISOString() } : m);
         }
         return next;
       });
@@ -959,7 +987,10 @@ export default function MapPage({ params }) {
       setPinsByMap(prev => { const next = { ...prev }; delete next[mapId]; return next; });
 
       if (activeMap?.id === mapId) {
-        const remaining = (mapsByPt[ptId] || []).filter(m => m.id !== mapId);
+        const remaining = sortMaps(
+          (mapsByPt[ptId] || []).filter(m => m.id !== mapId),
+          m => m.name, m => m.updated_at ?? m.created_at,
+        );
         if (remaining.length > 0) {
           await selectMap(ptId, remaining[0]);
         } else {
@@ -1019,6 +1050,7 @@ export default function MapPage({ params }) {
         color,
       });
       setPinsByMap(prev => ({ ...prev, [activeMap.id]: [...(prev[activeMap.id] || []), pin] }));
+      touchMap(activeMap.id);
       setPendingPin(null);
       setShowPinModal(false);
       // Stay in pin mode so user can keep adding pins
@@ -1041,6 +1073,7 @@ export default function MapPage({ params }) {
         ...prev,
         [activeMap.id]: prev[activeMap.id].map(p => p.id === updated.id ? updated : p),
       }));
+      touchMap(activeMap.id);
       setEditingPin(null);
     } catch (err) {
       toast({ title: 'Failed to update pin', description: err.message, status: 'error', duration: 3000 });
@@ -1064,6 +1097,7 @@ export default function MapPage({ params }) {
       await api.pins.update(activeMap.id, pin.id, {
         label: pin.label, description: next || null, color: pin.color,
       });
+      touchMap(activeMap.id);
     } catch (err) {
       setPinsByMap(prev => ({
         ...prev,
@@ -1085,6 +1119,7 @@ export default function MapPage({ params }) {
       await api.pins.update(activeMap.id, pin.id, {
         label: pin.label, description: pin.description, color: pin.color, found: next,
       });
+      touchMap(activeMap.id);
     } catch (err) {
       // Revert on failure
       setPinsByMap(prev => ({
@@ -1103,6 +1138,7 @@ export default function MapPage({ params }) {
         ...prev,
         [activeMap.id]: prev[activeMap.id].filter(p => p.id !== pinId),
       }));
+      touchMap(activeMap.id);
       if (activePinId === pinId) setActivePinId(null);
       if (openPinId   === pinId) setOpenPinId(null);
     } catch (err) {
@@ -1157,6 +1193,7 @@ export default function MapPage({ params }) {
         x_percent,
         y_percent,
       });
+      touchMap(activeMap.id);
     } catch (err) {
       toast({ title: 'Failed to move pin', description: err.message, status: 'error', duration: 3000 });
     }
@@ -1319,7 +1356,7 @@ export default function MapPage({ params }) {
                   <Sidebar
                     game={game}
                     playthroughs={playthroughs}
-                    mapsByPt={mapsByPt}
+                    mapsByPt={sortedMapsByPt}
                     pinsByMap={pinsByMap}
                     activeMapId={activeMap?.id}
                     activePinId={activePinId}
@@ -1330,6 +1367,9 @@ export default function MapPage({ params }) {
                     initialPtId={initialPtId}
                     onOpenGame={() => setGameModalOpen(true)}
                     gameId={id}
+                    sort={mapSort}
+                    onToggleSortMode={toggleSortMode}
+                    onToggleSortDir={toggleSortDir}
                   />
                 </div>
               )}

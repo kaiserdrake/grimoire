@@ -1371,7 +1371,7 @@ app.get('/api/playthroughs/:ptId/maps', isAuthenticated, async (req, res) => {
     if (ptCheck.rows.length === 0) return res.status(404).json({ message: 'Playthrough not found.' });
 
     const result = await query(
-      `SELECT m.id, m.name, m.created_at, a.url AS image_url, a.mime_type AS image_mime
+      `SELECT m.id, m.name, m.created_at, m.updated_at, a.url AS image_url, a.mime_type AS image_mime
        FROM game_maps m
        LEFT JOIN game_attachments a ON a.id = m.attachment_id
        WHERE m.playthrough_id=$1 AND m.user_id=$2
@@ -1412,7 +1412,7 @@ app.post('/api/playthroughs/:ptId/maps', isAuthenticated, async (req, res) => {
     const result = await query(
       `INSERT INTO game_maps (game_id, playthrough_id, user_id, attachment_id, name)
        VALUES ($1,$2,$3,$4,$5)
-       RETURNING id, name, created_at`,
+       RETURNING id, name, created_at, updated_at`,
       [game_id, ptId, userId, attachment_id, name]
     );
 
@@ -1454,7 +1454,7 @@ app.patch('/api/maps/:mapId', isAuthenticated, async (req, res) => {
       return res.status(404).json({ message: 'Attachment not found or does not belong to this game.' });
     }
 
-    await query('UPDATE game_maps SET attachment_id=$1 WHERE id=$2 AND user_id=$3', [attachment_id, mapId, userId]);
+    await query('UPDATE game_maps SET attachment_id=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3', [attachment_id, mapId, userId]);
 
     // Re-fit pins to the new image dimensions (computed client-side)
     if (Array.isArray(pins)) {
@@ -1502,7 +1502,7 @@ app.get('/api/maps/:mapId', isAuthenticated, async (req, res) => {
   const userId = req.user.id;
   try {
     const result = await query(
-      `SELECT m.id, m.name, m.game_id, m.playthrough_id, m.created_at,
+      `SELECT m.id, m.name, m.game_id, m.playthrough_id, m.created_at, m.updated_at,
               a.url AS image_url, a.mime_type AS image_mime
        FROM game_maps m
        LEFT JOIN game_attachments a ON a.id = m.attachment_id
@@ -1576,6 +1576,7 @@ app.post('/api/maps/:mapId/pins', isAuthenticated, async (req, res) => {
       'INSERT INTO map_pins (map_id, x_percent, y_percent, label, description, color) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
       [mapId, x_percent, y_percent, label, description || null, color || 'blue']
     );
+    await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });
@@ -1604,6 +1605,7 @@ app.put('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => {
       values
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Pin not found.' });
+    await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });
@@ -1618,6 +1620,7 @@ app.delete('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => 
     if (mapCheck.rows.length === 0) return res.status(404).json({ message: 'Map not found.' });
     const result = await query('DELETE FROM map_pins WHERE id=$1 AND map_id=$2 RETURNING id', [pinId, mapId]);
     if (result.rows.length === 0) return res.status(404).json({ message: 'Pin not found.' });
+    await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.json({ message: 'Pin deleted.' });
   } catch (err) {
     res.status(500).json({ message: 'Server error.' });
@@ -1770,6 +1773,7 @@ async function runMigrations() {
   await query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS wishlist_remarks TEXT`);
   await query(`ALTER TABLE playthroughs ADD COLUMN IF NOT EXISTS rating REAL NOT NULL DEFAULT 2.0`);
   await query(`ALTER TABLE map_pins ADD COLUMN IF NOT EXISTS found BOOLEAN NOT NULL DEFAULT false`);
+  await query(`ALTER TABLE game_maps ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 }
 
 runMigrations()

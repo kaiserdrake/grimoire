@@ -330,11 +330,38 @@ body {
   cursor: pointer;
   padding: 0.2rem 0.3rem;
   border-radius: var(--radius-sm);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   transition: background 0.1s;
 }
 .notes-sidebar-title-btn:hover { background: var(--color-bg-hover); }
+
+.notes-sidebar-sort {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.notes-sidebar-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.notes-sidebar-sort-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
 
 .notes-sidebar-title-text {
   font-size: 0.7rem;

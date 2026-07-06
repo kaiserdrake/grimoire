@@ -165,7 +165,8 @@ const createTables = async () => {
       user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       attachment_id  INTEGER REFERENCES game_attachments(id) ON DELETE SET NULL,
       name           TEXT NOT NULL,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 

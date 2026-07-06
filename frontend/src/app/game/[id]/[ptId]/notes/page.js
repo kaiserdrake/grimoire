@@ -20,6 +20,7 @@ import Navbar from '@/components/Navbar';
 import GameDetailModal from '@/components/GameDetailModal';
 import NotesDrawer from '@/components/NotesDrawer';
 import RecentDrawer from '@/components/RecentDrawer';
+import SidebarSortControl, { useSidebarSort } from '@/components/SidebarSortControl';
 import GameTabBar from '@/components/GameTabBar';
 import CameraCapture from '@/components/CameraCapture';
 import { useAuth } from '@/context/AuthContext';
@@ -520,7 +521,8 @@ function RenameInput({ value, onConfirm, onCancel }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
-  onSelectFile, onNewFile, onDeleteFile, onRenameFile, onOpenGame, initialPtId, gameId }) {
+  onSelectFile, onNewFile, onDeleteFile, onRenameFile, onOpenGame, initialPtId, gameId,
+  sort, onToggleSortMode, onToggleSortDir }) {
   const router = useRouter();
   const [expandedPts, setExpandedPts] = useState(() => {
     const init = {};
@@ -542,6 +544,7 @@ function Sidebar({ game, playthroughs, filesByPt, activePtId, activeFileId,
           <FiFolder size={13} style={{ flexShrink: 0, color: 'var(--color-accent)' }} />
           <span className="notes-sidebar-title-text">{game?.title ?? '…'}</span>
         </button>
+        <SidebarSortControl sort={sort} onToggleMode={onToggleSortMode} onToggleDir={onToggleSortDir} />
       </div>
       <div className="notes-sidebar-tree">
         {playthroughs.map((pt, i) => {
@@ -677,6 +680,8 @@ export default function NotesPage({ params }) {
   const [game, setGame]                     = useState(null);
   const [playthroughs, setPlaythroughs]     = useState([]);
   const [filesByPt, setFilesByPt]           = useState({});
+  const { sort: fileSort, toggleMode: toggleSortMode, toggleDir: toggleSortDir, sortItems: sortFiles } =
+    useSidebarSort('grimoire:notesSort');
   const [apiBase, setApiBase]               = useState('');
   const [iconGroups, setIconGroups]         = useState([]); // [{ name, icons: [url] }]
 
@@ -829,7 +834,8 @@ export default function NotesPage({ params }) {
         } else {
           const targetPt = pts.find(p => String(p.id) === String(initialPtId)) ?? pts[0];
           if (targetPt) {
-            const files = byPt[targetPt.id] || [];
+            // Open whichever file the sidebar will show first under the current sort.
+            const files = sortFiles(byPt[targetPt.id] || [], f => f.title, f => f.updated_at ?? f.created_at);
             if (files.length > 0) await openFile(targetPt.id, files[0].id);
             else setActivePtId(targetPt.id);
           }
@@ -870,7 +876,18 @@ export default function NotesPage({ params }) {
   const save = useCallback(async (text) => {
     if (!activeFileId) return;
     setSaving(true);
-    try { await api.noteFiles.save(activeFileId, { content: text }); setSaved(text); }
+    try {
+      const updated = await api.noteFiles.save(activeFileId, { content: text });
+      setSaved(text);
+      // Keep the sidebar's modified date current so "recent" sorting stays live.
+      setFilesByPt(prev => {
+        const next = { ...prev };
+        for (const ptId of Object.keys(next)) {
+          next[ptId] = next[ptId].map(f => f.id === activeFileId ? { ...f, updated_at: updated.updated_at } : f);
+        }
+        return next;
+      });
+    }
     catch (err) { toast({ title: 'Auto-save failed', description: err.message, status: 'error', duration: 3000 }); }
     finally { setSaving(false); }
   }, [activeFileId]);
@@ -1011,7 +1028,8 @@ export default function NotesPage({ params }) {
       const remaining = (filesByPt[ptId] || []).filter(f => f.id !== fileId);
       setFilesByPt(prev => ({ ...prev, [ptId]: remaining }));
       if (activeFileId === fileId) {
-        if (remaining.length > 0) await openFile(ptId, remaining[0].id);
+        const displayed = sortFiles(remaining, f => f.title, f => f.updated_at ?? f.created_at);
+        if (displayed.length > 0) await openFile(ptId, displayed[0].id);
         else { setActiveFileId(null); setContent(''); setSaved(''); }
       }
     } catch (err) { toast({ title: 'Failed to delete file', description: err.message, status: 'error', duration: 3000 }); }
@@ -1019,14 +1037,23 @@ export default function NotesPage({ params }) {
 
   const handleRenameFile = async (fileId, title) => {
     try {
-      await api.noteFiles.save(fileId, { title });
+      const updated = await api.noteFiles.save(fileId, { title });
       setFilesByPt(prev => {
         const next = { ...prev };
-        for (const ptId of Object.keys(next)) next[ptId] = next[ptId].map(f => f.id === fileId ? { ...f, title } : f);
+        for (const ptId of Object.keys(next)) next[ptId] = next[ptId].map(f => f.id === fileId ? { ...f, title, updated_at: updated.updated_at } : f);
         return next;
       });
     } catch (err) { toast({ title: 'Rename failed', description: err.message, status: 'error', duration: 3000 }); }
   };
+
+  // Sidebar file lists under the user's chosen sort (recent/alphabetical, asc/desc).
+  const sortedFilesByPt = useMemo(() => {
+    const out = {};
+    for (const ptId of Object.keys(filesByPt)) {
+      out[ptId] = sortFiles(filesByPt[ptId], f => f.title, f => f.updated_at ?? f.created_at);
+    }
+    return out;
+  }, [filesByPt, sortFiles]);
 
   const activeFile = activeFileId ? Object.values(filesByPt).flat().find(f => f.id === activeFileId) : null;
   const activePt = playthroughs.find(p => String(p.id) === String(activePtId));
@@ -1132,7 +1159,7 @@ export default function NotesPage({ params }) {
           <Sidebar
             game={game}
             playthroughs={playthroughs}
-            filesByPt={filesByPt}
+            filesByPt={sortedFilesByPt}
             activePtId={activePtId}
             activeFileId={activeFileId}
             onSelectFile={openFile}
@@ -1142,6 +1169,9 @@ export default function NotesPage({ params }) {
             onOpenGame={() => setGameModalOpen(true)}
             initialPtId={initialPtId}
             gameId={id}
+            sort={fileSort}
+            onToggleSortMode={toggleSortMode}
+            onToggleSortDir={toggleSortDir}
           />
         )}
 
