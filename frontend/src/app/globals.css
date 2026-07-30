@@ -1185,8 +1185,10 @@ tr.notes-preview-line-active th:first-child {
 .map-image-resizer {
   display: inline-block;
   resize: none;          /* hidden until hover */
-  overflow: auto;
-  max-width: 100%;
+  overflow: hidden;      /* resize needs a non-visible overflow; the image is
+                            always exactly 100%/100%, so nothing can overflow */
+  max-width: none;       /* the size is set per map in JS — clamping it here
+                            would stretch a view wider than the canvas */
 }
 .map-image-resizer:hover {
   resize: both;

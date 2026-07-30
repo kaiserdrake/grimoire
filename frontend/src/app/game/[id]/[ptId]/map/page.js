@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
-import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiCamera, FiImage, FiCheck, FiList } from 'react-icons/fi';
+import { FiMap, FiUpload, FiX, FiPlus, FiFolder, FiTrash2, FiLink, FiEdit2, FiFileText, FiCamera, FiImage, FiCheck, FiList, FiMaximize } from 'react-icons/fi';
 import { TbMapPin, TbRoute } from 'react-icons/tb';
 import Navbar from '@/components/Navbar';
 import { useAuth } from '@/context/AuthContext';
@@ -21,6 +21,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import GameTabBar from '@/components/GameTabBar';
 import CameraCapture from '@/components/CameraCapture';
 import SidebarSortControl, { useSidebarSort } from '@/components/SidebarSortControl';
+import { useMapView } from '@/components/useMapView';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { ptSidebarLabel } from '@/utils/playthroughs';
@@ -677,6 +678,8 @@ export default function MapPage({ params }) {
   const { mapState, setMapState } = useTabState();
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const imgRef      = useRef(null);
+  const viewportRef = useRef(null); // scrolling canvas around the map
+  const resizerRef  = useRef(null); // the resizable box the image fills
   const mapStateRef = useRef(mapState);
   mapStateRef.current = mapState;
 
@@ -734,6 +737,15 @@ export default function MapPage({ params }) {
 
   // ── Tool mode: 'none' | 'pin' | 'path' ────────────────────────────────────
   const [toolMode, setToolMode] = useState('none');
+
+  // ── View geometry: per-map size/zoom, persisted per game ────────────────────
+  const {
+    appliedSize: mapViewSize, resetView, refit: refitMapView,
+    handleImageLoad, clearMapSize,
+  } = useMapView(id, { imgRef, viewportRef, resizerRef, activeMapId: activeMap?.id ?? null });
+
+  // The hint banner shifts the image down, so an unsized map needs re-fitting.
+  useEffect(() => { refitMapView(); }, [toolMode, refitMapView]);
 
   // ── Pin placement — modal flow ─────────────────────────────────────────────
   const [pendingPin,      setPendingPin]      = useState(null); // { x_percent, y_percent }
@@ -961,6 +973,9 @@ export default function MapPage({ params }) {
         }
         return next;
       });
+      // The new image has its own aspect ratio — drop the stored box so the
+      // view re-fits instead of stretching it.
+      clearMapSize(mapId);
       done = true;
     } catch (err) {
       toast({ title: 'Failed to update image', description: err.message, status: 'error', duration: 4000 });
@@ -1484,6 +1499,21 @@ export default function MapPage({ params }) {
                         />
                       </Tooltip>
 
+                      {/* Reset view — fit the image's height to the canvas */}
+                      <Tooltip label="Reset view" hasArrow placement="bottom" openDelay={300}>
+                        <IconButton
+                          icon={<FiMaximize size={14} />}
+                          size="xs"
+                          aria-label="Reset view"
+                          onClick={resetView}
+                          style={{
+                            background: 'var(--color-bg-subtle)',
+                            color: 'var(--color-text-secondary)',
+                            border: '1px solid var(--color-border)',
+                          }}
+                        />
+                      </Tooltip>
+
                       {/* Update map image — keeps pins & data */}
                       <Tooltip label="Update image" hasArrow placement="bottom" openDelay={300}>
                         <IconButton
@@ -1505,7 +1535,7 @@ export default function MapPage({ params }) {
               </div>
 
               {/* Canvas */}
-              <Box flex={1} overflow="auto" p={4}>
+              <Box ref={viewportRef} flex={1} overflow="auto" p={4}>
                 {!activeMap ? (
                   <Flex
                     direction="column" align="center" justify="center"
@@ -1564,14 +1594,24 @@ export default function MapPage({ params }) {
                       onMouseLeave={handleContainerMouseUp}
                       style={{ cursor: draggingPin ? 'grabbing' : toolMode !== 'none' ? 'crosshair' : 'default' }}
                     >
-                      {/* Resizable wrapper */}
-                      <div className="map-image-resizer">
+                      {/* Resizable wrapper — sized per map (drag corner, ctrl+wheel, reset).
+                          Keyed so each map gets its own DOM node: the browser writes the
+                          corner-drag size onto this element, and it must not carry over. */}
+                      <div
+                        key={activeMap.id}
+                        ref={resizerRef}
+                        className="map-image-resizer"
+                        style={mapViewSize
+                          ? { width: mapViewSize.w, height: mapViewSize.h }
+                          : { maxWidth: '100%' }}
+                      >
                         <img
                           ref={imgRef}
                           src={`${apiBase}${activeMap.image_url}`}
                           alt={activeMap.name}
                           className="map-image"
                           draggable={false}
+                          onLoad={handleImageLoad}
                         />
                       </div>
 
