@@ -1139,10 +1139,12 @@ function nearestSatisfaction(r) {
   );
 }
 
-function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, viewport }) {
+function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, onRated, viewport }) {
   const toast = useToast();
   const [open, setOpen] = useState(true);
-  const [overrides, setOverrides] = useState({}); // playthrough_id → live/optimistic rating
+  // playthrough_id → in-flight drag value; dropped once the saved value is reloaded
+  // so a rating changed elsewhere (game detail / focus page) is not masked.
+  const [overrides, setOverrides] = useState({});
   const plotRef   = useRef(null);
   const headerRef = useRef(null);
   const bodyRef   = useRef(null);
@@ -1208,6 +1210,7 @@ function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, viewp
       if (Math.abs(e.clientX - d.startX) > 4 || Math.abs(e.clientY - d.startY) > 4) d.moved = true;
       const rect = plotRef.current.getBoundingClientRect();
       const r = yToRating(e.clientY - rect.top);
+      d.value = r;
       setOverrides((o) => ({ ...o, [d.ptId]: r }));
     };
     const onUp = () => {
@@ -1215,20 +1218,25 @@ function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, viewp
       if (!d) return;
       dragRef.current = null;
       setDraggingId(null);
-      if (!d.moved) {
+      // Release the point back to the server value (unless it is being dragged again).
+      const clearOverride = () => {
+        if (dragRef.current?.ptId === d.ptId) return;
         setOverrides((o) => { const n = { ...o }; delete n[d.ptId]; return n; });
+      };
+      if (!d.moved) {
+        clearOverride();
         onOpenGame(d.gameId);
         return;
       }
-      setOverrides((o) => {
-        const val = o[d.ptId];
-        if (val != null) {
-          api.playthroughs.update(d.ptId, { rating: round2(val) }).catch((err) => {
-            toast({ title: 'Could not save rating', description: err.message, status: 'error', duration: 3000 });
-          });
-        }
-        return o;
-      });
+      if (d.value == null) { clearOverride(); return; }
+      api.playthroughs.update(d.ptId, { rating: round2(d.value) })
+        // Reload first, so the rest of the page sees the new rating and the point
+        // doesn't snap back to the old value while the fetch is in flight.
+        .then(() => onRated?.())
+        .catch((err) => {
+          toast({ title: 'Could not save rating', description: err.message, status: 'error', duration: 3000 });
+        })
+        .finally(clearOverride);
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -1236,7 +1244,7 @@ function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, viewp
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
-  }, [onOpenGame, toast]);
+  }, [onOpenGame, onRated, toast]);
 
   const hasPoints = points.length > 0;
 
@@ -1495,9 +1503,11 @@ export default function CalendarPage() {
     }
   };
 
-  const fetchSessions = useCallback(async () => {
+  // `quiet` reloads without the spinner, so in-place edits (e.g. a rating change)
+  // don't tear down the charts and lose their zoom/scroll state.
+  const fetchSessions = useCallback(async ({ quiet = false } = {}) => {
     if (!user) return;
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       const [sessionData, gameData] = await Promise.all([
         api.calendar.sessions(),
@@ -1508,9 +1518,11 @@ export default function CalendarPage() {
     } catch (err) {
       toast({ title: 'Error loading calendar', description: err.message, status: 'error', duration: 3000 });
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [user]);
+
+  const refreshQuietly = useCallback(() => fetchSessions({ quiet: true }), [fetchSessions]);
 
   useEffect(() => { fetchSessions(); }, [fetchSessions]);
 
@@ -1693,6 +1705,7 @@ export default function CalendarPage() {
                   rangeStart={range.start}
                   rangeEnd={range.end}
                   onOpenGame={openGame}
+                  onRated={refreshQuietly}
                   viewport={chartViewport}
                 />
               </Box>
@@ -1707,8 +1720,8 @@ export default function CalendarPage() {
           game={selectedGame}
           isOpen={!!selectedGame}
           onClose={() => setSelectedGame(null)}
-          onUpdated={fetchSessions}
-          onDeleted={() => { fetchSessions(); setSelectedGame(null); }}
+          onUpdated={refreshQuietly}
+          onDeleted={() => { refreshQuietly(); setSelectedGame(null); }}
         />
       )}
     </>

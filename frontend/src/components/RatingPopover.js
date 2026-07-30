@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box, HStack, Text, Button, Tooltip, useToast,
   Slider, SliderTrack, SliderFilledTrack, SliderThumb,
@@ -17,6 +17,8 @@ function nearestSatisfaction(r) {
     (best, lvl) => (Math.abs(lvl.value - r) < Math.abs(best.value - r) ? lvl : best)
   );
 }
+
+const toRating = (r) => (r == null ? 2 : Number(r));
 
 // Compact slider; reports the value on release via onCommit.
 function SatisfactionSlider({ initial, onCommit }) {
@@ -48,16 +50,27 @@ function SatisfactionSlider({ initial, onCommit }) {
 // Pill that shows the current rating label and opens a compact slider popover.
 export default function RatingPopover({ pt, onUpdated }) {
   const toast = useToast();
-  const [rating, setRating] = useState(pt.rating == null ? 2 : Number(pt.rating));
+  // Optimistic value only; the playthrough prop stays the source of truth so a
+  // refreshed pt (e.g. rated elsewhere) is picked up instead of a stale snapshot.
+  const [pending, setPending] = useState(null);
+  const rating = pending ?? toRating(pt.rating);
   const label = nearestSatisfaction(rating).label;
+
+  // Drop the optimistic value once the refreshed prop agrees with it.
+  useEffect(() => {
+    if (pending != null && Math.abs(toRating(pt.rating) - pending) < 0.005) setPending(null);
+  }, [pt.rating, pending]);
 
   const commit = (val, onClose) => {
     const v = Math.round(val * 100) / 100;
-    setRating(v);
+    setPending(v);
     onClose?.(); // close the popover as soon as the value is set
     api.playthroughs.update(pt.id, { rating: v })
       .then(() => { pt.rating = v; onUpdated?.(); })
-      .catch((err) => toast({ title: 'Error saving rating', description: err.message, status: 'error', duration: 3000 }));
+      .catch((err) => {
+        setPending(null);
+        toast({ title: 'Error saving rating', description: err.message, status: 'error', duration: 3000 });
+      });
   };
 
   return (

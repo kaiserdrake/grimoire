@@ -311,7 +311,7 @@ function AddSessionRow({ ptId, onAdded }) {
 }
 
 // ── Playthrough card (collapsible) ────────────────────────────────────────────
-function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
+function PlaythroughCard({ pt, allPlaythroughs, defaultOpen, onUpdated }) {
   const [open, setOpen] = useState(defaultOpen);
   const [sessions, setSessions] = useState(pt.sessions || []);
 
@@ -356,7 +356,7 @@ function PlaythroughCard({ pt, allPlaythroughs, defaultOpen }) {
         </div>
 
         <HStack spacing={1} flexShrink={0} onClick={(e) => e.stopPropagation()}>
-          <RatingPopover pt={pt} />
+          <RatingPopover pt={pt} onUpdated={onUpdated} />
         </HStack>
       </HStack>
 
@@ -589,23 +589,22 @@ export default function PlaythroughPage({ params }) {
   const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState('');
   const [savingRemarks,         setSavingRemarks]         = useState(false);
 
+  const refreshGame = useCallback(async () => {
+    try {
+      const g = await api.games.get(id);
+      setGame(g);
+      setPlaythroughs(g.playthroughs || []);
+      setRemarksDraft(g.remarks || '');
+      setWishlistRemarksDraft(g.wishlist_remarks || '');
+    } catch (err) {
+      toast({ title: 'Failed to load', description: err.message, status: 'error', duration: 4000 });
+    }
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!user) return;
-    const load = async () => {
-      try {
-        const g = await api.games.get(id);
-        setGame(g);
-        setPlaythroughs(g.playthroughs || []);
-        setRemarksDraft(g.remarks || '');
-        setWishlistRemarksDraft(g.wishlist_remarks || '');
-      } catch (err) {
-        toast({ title: 'Failed to load', description: err.message, status: 'error', duration: 4000 });
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [id, user]);
+    refreshGame().finally(() => setLoading(false));
+  }, [user, refreshGame]);
 
   if (!user) return (
     <>
@@ -679,6 +678,7 @@ export default function PlaythroughPage({ params }) {
                   pt={pt}
                   allPlaythroughs={playthroughs}
                   defaultOpen={String(pt.id) === String(ptId)}
+                  onUpdated={refreshGame}
                 />
               ))
             )}
@@ -764,7 +764,7 @@ export default function PlaythroughPage({ params }) {
           game={game}
           isOpen={gameModalOpen}
           onClose={() => setGameModalOpen(false)}
-          onUpdated={() => api.games.get(id).then(g => { setGame(g); setPlaythroughs(g.playthroughs || []); setRemarksDraft(g.remarks || ''); setWishlistRemarksDraft(g.wishlist_remarks || ''); }).catch(() => {})}
+          onUpdated={refreshGame}
           onDeleted={() => router.push('/')}
         />
       )}

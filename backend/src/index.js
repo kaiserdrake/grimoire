@@ -450,6 +450,7 @@ app.get('/api/users/:id/export', isAuthenticated, isAdmin, async (req, res) => {
               'platform',   p.platform,
               'label',      p.label,
               'status',     p.status,
+              'rating',     p.rating,
               'created_at', p.created_at,
               'updated_at', p.updated_at,
               'sessions',   COALESCE((
@@ -512,6 +513,7 @@ app.get('/api/games', isAuthenticated, async (req, res) => {
               'platform',   p.platform,
               'label',      p.label,
               'status',     p.status,
+              'rating',     p.rating,
               'created_at', p.created_at,
               'updated_at', p.updated_at,
               'sessions',   COALESCE((
@@ -580,6 +582,7 @@ app.get('/api/games/:id', isAuthenticated, async (req, res) => {
               'platform',   p.platform,
               'label',      p.label,
               'status',     p.status,
+              'rating',     p.rating,
               'created_at', p.created_at,
               'updated_at', p.updated_at,
               'sessions',   COALESCE((
