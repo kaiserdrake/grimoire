@@ -667,6 +667,52 @@ tr.notes-preview-line-active th:first-child {
 .md-table-search:focus { border-color: var(--color-accent); }
 .md-table-search::placeholder { color: var(--color-text-muted); }
 
+/* ── Note tables: sortable headers ── (see utils/noteTables.js) */
+.notes-preview-content th.md-th-sortable { cursor: pointer; user-select: none; }
+.notes-preview-content th.md-th-sortable:hover { background: var(--color-accent-subtle); }
+.notes-preview-content th.md-th-sorted { color: var(--color-accent); }
+.md-th-inner { display: inline-flex; align-items: center; gap: 0.35em; }
+.md-sort-ind {
+  display: inline-flex; align-items: center; gap: 0.1em;
+  color: var(--color-text-muted); opacity: 0; transition: opacity 0.1s;
+}
+.md-th-sortable:hover .md-sort-ind { opacity: 0.55; }
+.md-sort-ind.active { opacity: 1; color: var(--color-accent); }
+.md-sort-rank { font-size: 0.65em; font-weight: 700; line-height: 1; }
+
+/* ── Note tables: checkbox cells (`:check`) ── */
+.notes-preview-content td.md-td-check { text-align: center; }
+.md-cell-check {
+  width: 0.95em; height: 0.95em; vertical-align: -0.1em;
+  accent-color: var(--color-accent); cursor: pointer;
+}
+.md-cell-check:disabled { cursor: default; opacity: 0.6; }
+
+/* ── Note tables: priority cells (`:prio`) ── */
+.md-prio {
+  --prio-color: var(--color-text-muted);
+  --prio-bg: transparent;
+  display: inline-flex; align-items: center; gap: 0.4em;
+  padding: 0.05em 0.45em; border-radius: 999px;
+  border: 1px solid var(--prio-color);
+  background: var(--prio-bg);
+  color: var(--prio-color);
+  font-size: 0.9em; font-weight: 600; line-height: 1.5;
+}
+.md-prio[data-level="critical"] { --prio-color: #f0616d; --prio-bg: rgba(240, 97, 109, 0.14); }
+.md-prio[data-level="high"]     { --prio-color: #f0904e; --prio-bg: rgba(240, 144, 78, 0.14); }
+.md-prio[data-level="medium"]   { --prio-color: #d8b84a; --prio-bg: rgba(216, 184, 74, 0.14); }
+.md-prio[data-level="low"]      { --prio-color: #4a9fd8; --prio-bg: rgba(74, 159, 216, 0.14); }
+.md-prio[data-level="none"]     { border-color: var(--color-border); }
+.md-prio-ctl { display: inline-flex; flex-direction: column; margin-right: -0.15em; }
+.md-prio-ctl button {
+  display: flex; align-items: center; justify-content: center;
+  height: 0.65em; padding: 0; border: none; background: none;
+  color: currentColor; cursor: pointer; opacity: 0.6;
+}
+.md-prio-ctl button:hover:not(:disabled) { opacity: 1; }
+.md-prio-ctl button:disabled { opacity: 0.2; cursor: default; }
+
 /* Frontmatter "Properties" panel — collapsible metadata table (see utils/frontmatter.js) */
 .note-frontmatter {
   margin: 0 0 1em;

@@ -12,7 +12,7 @@
 //
 // Only block (`:::`) directives are treated as metadata. Inline `:name` / `::name`
 // directives are restored to their original source text, because this codebase
-// uses colon-prefixed tokens as plain text (e.g. `:search`, see searchableTable.js)
+// uses colon-prefixed tokens as plain text (e.g. `:search`, see noteTables.js)
 // and remark-directive would otherwise swallow them.
 //
 // Requires remarkDirective to run earlier in the plugin chain so the `:::` syntax

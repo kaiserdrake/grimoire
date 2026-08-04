@@ -8,7 +8,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useFocus } from '@/context/FocusContext';
 import { api } from '@/utils/api';
 import { detectGamepad, makeRemarkGamepadPlugin } from '@/utils/gamepad';
-import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
+import { makeRemarkNoteTablePlugin } from '@/utils/noteTables';
+import NoteTable from '@/components/NoteTable';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkDirective from 'remark-directive';
@@ -434,11 +435,18 @@ function BulletinReadModal({ post, loading, onClose }) {
 
           ) : post?.content?.trim() ? (
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkSearchableTablePlugin()]}
+              remarkPlugins={[remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkNoteTablePlugin(), makeRemarkGamepadPlugin(gamepad)]}
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (
                   <div className="img-resizer"><img {...props} /></div>
+                ),
+                // No onSourceEdit: the bulletin preview is read-only, so checkboxes
+                // and priority pills render disabled (search + sorting still work).
+                table: ({ node, ...props }) => (
+                  props.className?.includes?.('note-frontmatter')
+                    ? <table {...props} />
+                    : <NoteTable {...props} />
                 ),
               }}
             >{post.content}</ReactMarkdown>

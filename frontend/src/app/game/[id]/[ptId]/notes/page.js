@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -31,10 +31,10 @@ import { useTabState } from '@/context/TabStateContext';
 import { ptSidebarLabel } from '@/utils/playthroughs';
 import { detectGamepad, makeRemarkGamepadPlugin, GAMEPAD_MAP, PICKER_SECTIONS } from '@/utils/gamepad';
 import { makeRemarkNoteIconPlugin, buildIconMap, iconTokenFor, normalizeIcon } from '@/utils/noteIcons';
-import { makeRemarkSearchableTablePlugin } from '@/utils/searchableTable';
+import { makeRemarkNoteTablePlugin } from '@/utils/noteTables';
 import { makeRemarkMetaPlugin } from '@/utils/metaBlocks';
 import { makeRemarkFrontmatterPlugin } from '@/utils/frontmatter';
-import SearchableTable from '@/components/SearchableTable';
+import NoteTable from '@/components/NoteTable';
 import { slugify, rehypeHeadingIds, withHeadingSlugs } from '@/utils/headings';
 import TierList from '@/components/TierList';
 
@@ -410,6 +410,11 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       ' | cell | cell |\n',
       'cell'
     )},
+    { icon: <FiCheckSquare size={12} />, label: 'Insert task table (checkbox + priority)', action: () => apply(
+      '\n| Task :search | Done :check :sort1 | Priority :prio :sort2 |\n| --- | --- | --- |\n| ',
+      ' | [ ] | Medium |\n',
+      'First task'
+    )},
     { icon: <FiLayers size={12} />, label: 'Insert tier list', action: () => apply(
       '\n```tier\nS: \nA: \nB: \nC: \nD: \nUnranked: \n```\n'
     )},
@@ -455,6 +460,13 @@ function MarkdownHelpModal({ isOpen, onClose }) {
     { heading: 'Headings',        rows: [['# H1','Heading 1'],['## H2','Heading 2'],['### H3','Heading 3']] },
     { heading: 'Lists',           rows: [['- item','Bullet list'],['1. item','Numbered list'],['- [ ] task','Task list']] },
     { heading: 'Other',           rows: [['> quote','Blockquote'],['---','Horizontal rule'],['[text](url)','Link'],['![alt](url)','Image'],['| A | B |','Table'],[':btn[cross]', 'Gamepad button (canonical name)'],['```code```','Code block']] },
+    { heading: 'Table headers',   rows: [
+      ['| Name :search |','Filter box for this column'],
+      ['| Done :check |','Cells hold [ ] / [x] as checkboxes'],
+      ['| Priority :prio |','Cells hold Critical…Low with ▲▼ controls'],
+      ['| Done :sort1 |','Sort by this column first'],
+      ['| Priority :sort2desc |','…then by this one, descending'],
+    ] },
   ];
   return (
     <Modal isOpen={isOpen} onClose={onClose} isCentered size="sm">
@@ -674,7 +686,7 @@ export default function NotesPage({ params }) {
   const { notesState, setNotesState } = useTabState();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Incremented each render pass to assign 1-based index to each SearchableTable
+  // Incremented each render pass to assign 1-based index to each NoteTable
   const tableCounterRef = useRef(0);
 
   const [game, setGame]                     = useState(null);
@@ -903,21 +915,35 @@ export default function NotesPage({ params }) {
   const handleManualSave = () => { clearTimeout(saveTimer.current); save(content); };
   useEffect(() => () => clearTimeout(saveTimer.current), []);
 
-  // Replace a ```tier block (by its line range) with regenerated body text, then
-  // persist via the normal debounced save. Used by the interactive TierList.
-  const persistTierBlock = useCallback((position, body) => {
-    if (!position) return;
-    const lines = content.split('\n');
-    const block = '```tier\n' + body + '\n```';
-    const next = [
-      ...lines.slice(0, position.start.line - 1),
-      block,
-      ...lines.slice(position.end.line),
-    ].join('\n');
+  // Apply an edit made from the rendered preview back to the markdown source, then
+  // persist via the normal debounced save. Reads the live content from a ref so the
+  // callback identity survives typing — see markdownComponents below.
+  const applySourceChange = useCallback((next) => {
     setContent(next);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(next), 2000);
-  }, [content, save]);
+  }, [save]);
+
+  // Replace a ```tier block (by its line range) with regenerated body text.
+  // Used by the interactive TierList.
+  const persistTierBlock = useCallback((position, body) => {
+    if (!position) return;
+    const lines = contentRef.current.split('\n');
+    const block = '```tier\n' + body + '\n```';
+    applySourceChange([
+      ...lines.slice(0, position.start.line - 1),
+      block,
+      ...lines.slice(position.end.line),
+    ].join('\n'));
+  }, [applySourceChange]);
+
+  // Replace a source range [start, end) — used by note-table checkbox toggles and
+  // priority nudges, which carry the offsets of their token in the markdown.
+  const persistSourceRange = useCallback((start, end, text) => {
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return;
+    const cur = contentRef.current;
+    applySourceChange(cur.slice(0, start) + text + cur.slice(end));
+  }, [applySourceChange]);
 
   // Scroll the preview to a heading id and reflect it in the URL so the address
   // bar can be copied as a deep-link to that section. Works in split, locked and
@@ -1061,10 +1087,15 @@ export default function NotesPage({ params }) {
 
   // Stable plugin/component identities for the markdown preview. Recreating these
   // inline on every render makes react-markdown remount custom components (e.g.
-  // SearchableTable), which would wipe a table's active filter on every cell click.
+  // NoteTable), which would wipe a table's active filter and sort. That is why the
+  // preview→source callbacks below read `contentRef` instead of closing over
+  // `content`: depending on `content` would rebuild them on every keystroke.
   // These hooks must run before any early return below to satisfy the Rules of Hooks.
   const remarkPlugins = useMemo(
-    () => [remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap), makeRemarkSearchableTablePlugin()],
+    // The note-table plugin runs directly after the meta plugin (which restores
+    // `:check` & co. from directive nodes to text) and before the gamepad/icon
+    // plugins, so it still sees each cell's text nodes intact.
+    () => [remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkNoteTablePlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap)],
     [gamepad, iconMap],
   );
   const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds], []);
@@ -1116,8 +1147,8 @@ export default function NotesPage({ params }) {
       // Tables are keyed st1, st2, … by their order on the page. Accept a bare
       // `st` as a convenience alias for the first table.
       const fromUrl = searchParams.get(`st${idx}`) ?? (idx === 1 ? searchParams.get('st') : null);
-      const init = props['data-searchable'] ? (fromUrl ?? '') : '';
-      return <SearchableTable tableIndex={idx} initialSearch={init} {...props} />;
+      const init = props['data-search-cols'] ? (fromUrl ?? '') : '';
+      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} {...props} />;
     },
     pre: ({ node, children, ...props }) => {
       const codeEl = node?.children?.[0];
@@ -1137,7 +1168,7 @@ export default function NotesPage({ params }) {
       }
       return <pre {...props}>{children}</pre>;
     },
-  }), [iconMap, searchParams, persistTierBlock, navigateSection]);
+  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, navigateSection]);
 
   if (!user) return (
     <>
