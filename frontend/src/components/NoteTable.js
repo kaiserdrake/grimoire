@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Children, cloneElement, isValidElement } from 'react';
-import { FiSearch, FiChevronUp, FiChevronDown } from 'react-icons/fi';
+import { FiSearch, FiChevronUp, FiChevronDown, FiPlus } from 'react-icons/fi';
 import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 
 // Custom react-markdown `table` renderer for note tables. Rows can be filtered by
@@ -75,9 +75,11 @@ function sortHint(kind, dir) {
 }
 
 export default function NoteTable({
-  'data-col-kinds':   colKindsAttr   = '',
-  'data-search-cols': searchColsAttr = '',
-  'data-sort-spec':   sortSpecAttr   = '',
+  'data-col-kinds':    colKindsAttr   = '',
+  'data-search-cols':  searchColsAttr = '',
+  'data-sort-spec':    sortSpecAttr   = '',
+  'data-row-template': rowTemplate    = '',
+  'data-table-end':    tableEndAttr,
   tableIndex, initialSearch, onSourceEdit, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
@@ -224,23 +226,40 @@ export default function NoteTable({
     rows.map(({ tr, cells }) => cloneElement(tr, { key: tr.key }, cells.map(renderCell))),
   );
 
+  // ── Add row ─────────────────────────────────────────────────────────────────
+  const tableEnd = numAttr(tableEndAttr);
+  const canAddRow = !!onSourceEdit && tableEnd != null && !!rowTemplate;
+  const addRow = () => {
+    // An active filter would hide the blank row, making the click look like a
+    // no-op — so clear it and show the row that was just added.
+    setQuery('');
+    onSourceEdit(tableEnd, tableEnd, `\n${rowTemplate}`);
+  };
+
   const table = <table {...props}>{renderedHead}{renderedBody}</table>;
 
-  if (!searchCols.length) return table;
+  if (!searchCols.length && !canAddRow) return table;
 
   return (
     <div className="md-table-wrap">
-      <div className="md-table-search-wrap">
-        <FiSearch size={13} className="md-table-search-icon" />
-        <input
-          className="md-table-search"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter rows…"
-        />
-      </div>
+      {searchCols.length > 0 && (
+        <div className="md-table-search-wrap">
+          <FiSearch size={13} className="md-table-search-icon" />
+          <input
+            className="md-table-search"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter rows…"
+          />
+        </div>
+      )}
       {table}
+      {canAddRow && (
+        <button type="button" className="md-table-add-row" onClick={addRow} title="Append an empty row">
+          <FiPlus size={11} /> Row
+        </button>
+      )}
     </div>
   );
 }

@@ -411,8 +411,8 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       'cell'
     )},
     { icon: <FiCheckSquare size={12} />, label: 'Insert task table (checkbox + priority)', action: () => apply(
-      '\n| Task :search | Done :check :sort1 | Priority :prio :sort2 |\n| --- | --- | --- |\n| ',
-      ' | [ ] | Medium |\n',
+      '\n| Task :search | Done :check :sort1 | Priority :prio :sort2 | Remarks |\n| --- | --- | --- | --- |\n| ',
+      ' | [ ] | Medium |  |\n',
       'First task'
     )},
     { icon: <FiLayers size={12} />, label: 'Insert tier list', action: () => apply(

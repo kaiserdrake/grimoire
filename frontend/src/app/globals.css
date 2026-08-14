@@ -667,6 +667,20 @@ tr.notes-preview-line-active th:first-child {
 .md-table-search:focus { border-color: var(--color-accent); }
 .md-table-search::placeholder { color: var(--color-text-muted); }
 
+/* ── Note tables: append an empty row ── */
+.md-table-add-row {
+  display: inline-flex; align-items: center; gap: 0.25em;
+  margin-top: 0.3em; padding: 0.15em 0.5em;
+  font-size: 0.75rem; line-height: 1.4;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer; opacity: 0.5; transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+.md-table-wrap:hover .md-table-add-row { opacity: 1; }
+.md-table-add-row:hover { color: var(--color-accent); border-color: var(--color-accent); }
+
 /* ── Note tables: sortable headers ── (see utils/noteTables.js) */
 .notes-preview-content th.md-th-sortable { cursor: pointer; user-select: none; }
 .notes-preview-content th.md-th-sortable:hover { background: var(--color-accent-subtle); }

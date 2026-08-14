@@ -9,6 +9,10 @@
 //   :sort[n][dir]  initial sort; `n` is the position in the multi-sort chain and
 //                  `dir` is asc (default) or desc — e.g. `:sort1` `:sort2desc`
 //
+// Every table also carries the offset of its last row plus a blank-row template,
+// so the rendered table can append an empty row without the author hand-typing the
+// pipes.
+//
 //   | Task :search | Done :check :sort1 | Priority :prio :sort2 |
 //   | --- | --- | --- |
 //   | Beat the boss | [x] | High |
@@ -185,11 +189,18 @@ function enhanceTable(node, src) {
     .map(cfg => `${cfg.i}:${cfg.sortDir}`)
     .join(',');
 
+  // A blank row appended by the "add row" control: typed columns are seeded with
+  // their neutral token so the new row renders with a checkbox / priority pill.
+  const rowTemplate = `| ${cols.map(c => (c.kind === 'check' ? '[ ]' : c.kind === 'prio' ? '-' : '')).join(' | ')} |`;
+
   setProps(node, {
     'data-note-table': 'true',
     'data-col-kinds': cols.map(c => c.kind || 'text').join(','),
     'data-search-cols': cols.map((c, i) => (c.search ? i : -1)).filter(i => i >= 0).join(','),
     'data-sort-spec': sortSpec,
+    'data-row-template': rowTemplate,
+    // End of the last row, i.e. where a new row line gets inserted.
+    ...(node.position?.end?.offset != null ? { 'data-table-end': String(node.position.end.offset) } : {}),
   });
 }
 
