@@ -1066,6 +1066,50 @@ app.get('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
   }
 });
 
+// Expands :icon[token] references in note markdown into ![token](url) images so the
+// content renders in external viewers. Best-effort: returns the content unchanged if
+// the game has no icon groups configured, or if anything goes wrong resolving them.
+const expandNoteIcons = async (content, { gameId, userId, req }) => {
+  if (!content.includes(':icon[')) return content;
+  try {
+    const settingResult = await query(
+      'SELECT value FROM user_settings WHERE user_id=$1 AND key=$2',
+      [userId, `note_icons_${gameId}`]
+    );
+    const groups = settingResult.rows[0]?.value;
+    if (!Array.isArray(groups) || groups.length === 0) return content;
+
+    const apiBase = process.env.API_PUBLIC_URL || `${req.protocol}://${req.headers.host}`;
+    // Build token -> url map (mirrors frontend buildIconMap logic)
+    const iconMap = {};
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const slugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    groups.forEach(g => {
+      const used = new Set();
+      (g.icons || []).map((icon, i) => {
+        const raw = typeof icon === 'string' ? { url: icon, name: '', code: pad2(i + 1) } : icon;
+        const base = slugify(raw.code) || pad2(i + 1);
+        let resolved = base; let k = 2;
+        while (used.has(resolved)) { resolved = `${base}_${k}`; k++; }
+        used.add(resolved);
+        return { url: raw.url || '', resolved };
+      }).forEach(({ url, resolved }) => {
+        if (!url) return;
+        const token = `${slugify(g.name)}_${resolved}`;
+        const src = url.startsWith('http') ? url : `${apiBase}${url}`;
+        iconMap[token] = src;
+      });
+    });
+    return content.replace(/:icon\[([a-zA-Z0-9_]+)\]/g, (match, token) => {
+      const src = iconMap[token.toLowerCase()];
+      return src ? `![${token}](${src})` : match;
+    });
+  } catch {
+    // Icon resolution is best-effort; serve raw content on any error
+    return content;
+  }
+};
+
 // Public raw endpoint — returns note file markdown content as plain text (no auth required).
 // :icon[token] references are expanded to ![token](url) so they render in external viewers.
 app.get('/api/note-files/:fileId/raw', async (req, res) => {
@@ -1080,52 +1124,68 @@ app.get('/api/note-files/:fileId/raw', async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).send('Not found.');
 
-    let { content, game_id, user_id } = result.rows[0];
-    content = content ?? '';
-
-    // Only attempt icon expansion if the content actually contains :icon[
-    if (content.includes(':icon[')) {
-      try {
-        const settingResult = await query(
-          'SELECT value FROM user_settings WHERE user_id=$1 AND key=$2',
-          [user_id, `note_icons_${game_id}`]
-        );
-        const groups = settingResult.rows[0]?.value;
-        if (Array.isArray(groups) && groups.length > 0) {
-          const apiBase = process.env.API_PUBLIC_URL || `${req.protocol}://${req.headers.host}`;
-          // Build token -> url map (mirrors frontend buildIconMap logic)
-          const iconMap = {};
-          const pad2 = (n) => String(n).padStart(2, '0');
-          const slugify = (s) => (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-          groups.forEach(g => {
-            const used = new Set();
-            (g.icons || []).map((icon, i) => {
-              const raw = typeof icon === 'string' ? { url: icon, name: '', code: pad2(i + 1) } : icon;
-              const base = slugify(raw.code) || pad2(i + 1);
-              let resolved = base; let k = 2;
-              while (used.has(resolved)) { resolved = `${base}_${k}`; k++; }
-              used.add(resolved);
-              return { url: raw.url || '', resolved };
-            }).forEach(({ url, resolved }) => {
-              if (!url) return;
-              const token = `${slugify(g.name)}_${resolved}`;
-              const src = url.startsWith('http') ? url : `${apiBase}${url}`;
-              iconMap[token] = src;
-            });
-          });
-          content = content.replace(/:icon\[([a-zA-Z0-9_]+)\]/g, (match, token) => {
-            const src = iconMap[token.toLowerCase()];
-            return src ? `![${token}](${src})` : match;
-          });
-        }
-      } catch {
-        // Icon resolution is best-effort; serve raw content on any error
-      }
-    }
+    const { game_id, user_id } = result.rows[0];
+    const content = await expandNoteIcons(result.rows[0].content ?? '', { gameId: game_id, userId: user_id, req });
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(content);
   } catch (err) {
+    res.status(500).send('Server error.');
+  }
+});
+
+// Public raw endpoint for the README note of the game currently in focus — same
+// output as /api/note-files/:fileId/raw, but resolved through the user's `in_focus`
+// setting so the URL stays stable as focus moves between games.
+// User resolution: the session cookie when present, otherwise ?user=<userName>
+// (users.name is unique; matched exactly first, then case-insensitively).
+// The note file is matched by title: 'README.md' preferred, plain 'README' accepted.
+app.get('/api/focus/readme/raw', async (req, res) => {
+  try {
+    let userId = null;
+    const token = req.cookies?.token;
+    if (token) {
+      try { userId = jwt.verify(token, process.env.JWT_SECRET).id; } catch { /* fall through to ?user= */ }
+    }
+    if (userId == null && req.query.user != null) {
+      const name = String(req.query.user).trim();
+      if (!name) return res.status(400).send('Invalid user.');
+      const userResult = await query(
+        `SELECT id FROM users WHERE lower(name)=lower($1)
+         ORDER BY (name = $1) DESC LIMIT 1`,
+        [name]
+      );
+      if (userResult.rows.length === 0) return res.status(404).send('User not found.');
+      userId = userResult.rows[0].id;
+    }
+    if (userId == null) return res.status(401).send('Authentication required, or pass ?user=<userName>.');
+
+    const focusResult = await query(
+      "SELECT value FROM user_settings WHERE user_id=$1 AND key='in_focus'",
+      [userId]
+    );
+    const focus = focusResult.rows[0]?.value;
+    const ptId = Number(focus?.ptId);
+    if (!Number.isInteger(ptId)) return res.status(404).send('No game is currently in focus.');
+
+    const result = await query(
+      `SELECT nf.content, p.game_id, p.user_id
+       FROM note_files nf
+       JOIN playthroughs p ON p.id = nf.playthrough_id
+       WHERE nf.playthrough_id=$1 AND nf.user_id=$2 AND lower(nf.title) IN ('readme.md', 'readme')
+       ORDER BY (lower(nf.title) = 'readme.md') DESC, nf.created_at
+       LIMIT 1`,
+      [ptId, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).send('No README note for the focused game.');
+
+    const { game_id, user_id } = result.rows[0];
+    const content = await expandNoteIcons(result.rows[0].content ?? '', { gameId: game_id, userId: user_id, req });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(content);
+  } catch (err) {
+    console.error('Error serving focus README:', err);
     res.status(500).send('Server error.');
   }
 });
