@@ -133,6 +133,9 @@ export default function GameSettingsPage({ params }) {
             label: (d.label || '').trim(),
             category: (d.category || '').trim(),
             trackable: !!d.trackable,
+            // 0 / absent means "always shown"; anything else is the zoom
+            // percentage this type starts appearing at.
+            minZoom: Number(d.minZoom) > 0 ? Number(d.minZoom) : 0,
           }))
           .filter(d => d.label);
         const cleanedGroups = iconGroups
@@ -164,7 +167,7 @@ export default function GameSettingsPage({ params }) {
 
   // ── Map defaults ────────────────────────────────────────────────────────────
   const addDefault = () =>
-    setMapDefaults(prev => [...prev, { icon: PIN_TYPES[0].id, color: PIN_COLORS[0], label: '', category: '', trackable: false }]);
+    setMapDefaults(prev => [...prev, { icon: PIN_TYPES[0].id, color: PIN_COLORS[0], label: '', category: '', trackable: false, minZoom: 0 }]);
   const updateDefault = (idx, patch) =>
     setMapDefaults(prev => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
   const removeDefault = (idx) =>
@@ -381,7 +384,7 @@ export default function GameSettingsPage({ params }) {
           <Section
             icon={FiMap}
             title="Map Defaults"
-            description="Map a pin type + color to a default label and category. In the map editor these appear as one-click markers and as the legend. Enable Track to count found/total progress for that type."
+            description="Map a pin type + color to a default label and category. In the map editor these appear as one-click markers and as the legend. Enable Track to count found/total progress for that type, and set From zoom to keep a dense type hidden until the map is zoomed in that far."
           >
             {mapDefaults.length === 0 ? (
               <Text fontSize="xs" mb={2} style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
@@ -395,6 +398,7 @@ export default function GameSettingsPage({ params }) {
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '110px' }}>Color</Text>
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" flex={1}>Label</Text>
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '130px' }}>Category</Text>
+                  <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '70px', textAlign: 'center' }}>From zoom</Text>
                   <Text fontSize="10px" textTransform="uppercase" letterSpacing="0.06em" style={{ width: '40px', textAlign: 'center' }}>Track</Text>
                   <Box style={{ width: '24px' }} />
                 </HStack>
@@ -446,6 +450,24 @@ export default function GameSettingsPage({ params }) {
                       onChange={e => updateDefault(idx, { category: e.target.value })}
                       placeholder="e.g. Items"
                     />
+                    {/* Minimum zoom — keeps a dense type off the map until the
+                        camera is close enough for it to be readable. */}
+                    <Tooltip
+                      label="Hide this type until the map is zoomed to at least this percentage. Blank or 0 always shows it."
+                      hasArrow placement="top" openDelay={300}
+                    >
+                      <Input
+                        size="xs"
+                        type="number"
+                        min={0}
+                        max={800}
+                        step={10}
+                        style={{ width: '70px', background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', textAlign: 'center' }}
+                        value={d.minZoom || ''}
+                        onChange={e => updateDefault(idx, { minZoom: Number(e.target.value) || 0 })}
+                        placeholder="any"
+                      />
+                    </Tooltip>
                     {/* Track progress toggle */}
                     <Tooltip label={d.trackable ? 'Tracking found/total' : 'Track found/total progress'} hasArrow placement="top" openDelay={300}>
                       <Box

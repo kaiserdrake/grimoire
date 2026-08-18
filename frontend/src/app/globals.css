@@ -1236,40 +1236,222 @@ tr.notes-preview-line-active th:first-child {
 }
 
 /* ── Map viewer ────────────────────────────────────────────────────────────── */
+/* The camera: the pan/zoom transform lives here, set per frame from JS. Laid out
+   at the image's natural size and anchored to the canvas origin, so `x`/`y` are
+   plain offsets from the top-left of the viewport. Everything inside stays in
+   image coordinates, which is what keeps the pins' 0-100% positions valid. */
 .map-container {
-  position: relative;
-  display: inline-block;
-  cursor: crosshair;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;    /* never shrink to the canvas — the camera does the fitting */
+  transform-origin: 0 0;
   user-select: none;
-}
-.map-image-resizer {
-  display: inline-block;
-  resize: none;          /* hidden until hover */
-  overflow: hidden;      /* resize needs a non-visible overflow; the image is
-                            always exactly 100%/100%, so nothing can overflow */
-  max-width: none;       /* the size is set per map in JS — clamping it here
-                            would stretch a view wider than the canvas */
-}
-.map-image-resizer:hover {
-  resize: both;
 }
 .map-image {
   display: block;
-  width: 100%;
-  height: 100%;
+  max-width: none;       /* natural size — the camera supplies all scaling */
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
 }
+/* Markers counter-scale the camera (see --map-scale) so they keep a constant
+   on-screen size; the inline transform each one carries is what actually
+   applies it, since inline styles outrank these rules. */
 .map-pin {
   position: absolute;
-  transform: translate(-50%, -100%);
+  /* Centred on its coordinate, matching the inline transform that actually
+     applies. These two disagreed (-100% here, -50% inline) until the inline
+     rule was found to win, which made the intended anchor ambiguous. */
+  transform: translate(-50%, -50%) scale(calc(1 / var(--map-scale, 1)));
+  transform-origin: 50% 50%;
   cursor: pointer;
   z-index: 10;
-  transition: transform 0.15s ease;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
-.map-pin:hover { transform: translate(-50%, -100%) scale(1.2); z-index: 20; }
-.map-pin svg  { width: 28px; height: 28px; }
+.map-pin:hover { z-index: 20; }
+/* The artwork fills whatever box PinIcon was given — marker size is passed as a
+   prop, not set here. Sizing `.map-pin > div` would hit the callout too, since
+   it is also a direct child. */
+.map-pin svg { width: 100%; height: 100%; }
+
+/* A crowd of markers, collapsed into one bubble. */
+.map-cluster {
+  position: absolute;
+  transform-origin: 50% 50%;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: zoom-in;
+  user-select: none;
+}
+.map-cluster:hover { filter: brightness(1.12); z-index: 21; }
+.map-cluster--found { opacity: 0.45; filter: grayscale(0.4); }
+
+/* ── Map: find-a-marker palette ─────────────────────────────────────────────── */
+.map-search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.map-search-results {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+.map-search-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.map-search-empty code {
+  background: var(--color-bg-subtle);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+.map-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.map-search-row[data-active='true'] {
+  background: var(--color-accent-subtle);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.map-search-icon { flex-shrink: 0; display: flex; align-items: center; }
+.map-search-text { flex: 1; min-width: 0; }
+.map-search-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-search-found {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-success);
+}
+.map-search-note {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-search-where {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  max-width: 40%;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+.map-search-where span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.map-search-pt {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+}
+.map-search-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.map-search-footer kbd {
+  display: inline-block;
+  min-width: 15px;
+  margin-right: 3px;
+  padding: 0 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-bg-subtle);
+  text-align: center;
+  font-family: inherit;
+}
+.map-search-hint { margin-left: auto; font-style: italic; }
+
+/* Tool-mode hint, floated over the canvas rather than stacked above it. */
+.map-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: min(90%, 34rem);
+  pointer-events: auto;
+}
+
+/* Zoom controls in the topbar: −, level readout, +. */
+.map-zoom-controls {
+  display: flex;
+  align-items: stretch;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  height: 24px;
+}
+.map-zoom-btn,
+.map-zoom-level {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.map-zoom-btn { width: 24px; }
+.map-zoom-level {
+  min-width: 46px;
+  padding: 0 0.35rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;  /* the readout must not jitter as it changes */
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+}
+.map-zoom-btn:hover:not(:disabled),
+.map-zoom-level:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.map-zoom-btn:disabled,
+.map-zoom-level:disabled { opacity: 0.4; cursor: default; }
 
 /* Editable note inside the pin callout bubble */
 .map-pin-note {
@@ -1620,6 +1802,62 @@ tr.notes-preview-line-active th:first-child {
 /* Hide the arrow diamond — it can't be made translucent reliably */
 .map-pin-popover ~ .chakra-popover__arrow-positioner {
   display: none !important;
+}
+
+/* ── Marker display popover ─────────────────────────────────────────────────── */
+/* Chakra dresses PopoverContent in its own colour-mode palette and a focus ring,
+   neither of which knows about this app's CSS-variable theme. */
+.map-marker-popover.chakra-popover__content {
+  background: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--color-text-primary) !important;
+}
+.map-marker-popover.chakra-popover__content:focus,
+.map-marker-popover.chakra-popover__content:focus-visible {
+  outline: none !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+.map-marker-popover ~ .chakra-popover__arrow-positioner {
+  display: none !important;
+}
+
+/* A native range input keeps the platform's own colours whatever the theme is. */
+.map-marker-popover input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  margin: 6px 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  outline: none;
+  cursor: pointer;
+}
+.map-marker-popover input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+.map-marker-popover input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+}
+.map-marker-popover input[type='range']::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Tooltip */
