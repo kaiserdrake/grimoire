@@ -512,6 +512,51 @@ body {
   background: var(--color-accent-subtle);
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
+/* ── Notes edit-mode switch (side by side / render edit) ── */
+.notes-mode-switch {
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.notes-mode-switch button {
+  background: transparent !important;
+  color: var(--color-text-muted) !important;
+  border: none; border-radius: 0 !important;
+}
+.notes-mode-switch button.active {
+  background: var(--color-accent-subtle) !important;
+  color: var(--color-accent) !important;
+}
+
+/* ── Render-edit mode: double-click a block to edit its markdown ── */
+.notes-render-edit [data-block-start] { cursor: text; }
+.notes-render-edit [data-block-start]:hover {
+  outline: 1px dashed var(--color-border);
+  outline-offset: 3px;
+}
+.notes-block-editor {
+  display: block; width: 100%;
+  margin: 0.4em 0; padding: 0.45em 0.6em;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.85em; line-height: 1.55;
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  outline: none; resize: none; overflow: hidden;
+}
+.notes-add-block {
+  display: inline-flex; align-items: center; gap: 0.3em;
+  margin-top: 0.9em; padding: 0.2em 0.6em;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer; opacity: 0.6; transition: opacity 0.12s, color 0.12s, border-color 0.12s;
+}
+.notes-add-block:hover { opacity: 1; color: var(--color-accent); border-color: var(--color-accent); }
+
 /* Hover "#" anchor on preview headings — copies a deep-link to the section */
 .notes-heading-anchor { scroll-margin-top: 0.5rem; }
 .notes-heading-link {
@@ -694,6 +739,20 @@ tr.notes-preview-line-active th:first-child {
 .md-sort-ind.active { opacity: 1; color: var(--color-accent); }
 .md-sort-rank { font-size: 0.65em; font-weight: 700; line-height: 1; }
 
+/* ── Note tables: inline-editable text cells ── */
+.notes-preview-content td.md-td-editable { cursor: text; }
+.notes-preview-content td.md-td-editable:hover { background: var(--color-accent-subtle); }
+.notes-preview-content td.md-td-editing { padding: 0.15em 0.3em; }
+.md-cell-edit {
+  font: inherit; font-family: var(--font-mono, monospace); font-size: 0.95em;
+  min-width: 100%; padding: 0.15em 0.3em;
+  color: var(--color-text-primary);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
 /* ── Note tables: checkbox cells (`:check`) ── */
 .notes-preview-content td.md-td-check { text-align: center; }
 .md-cell-check {
@@ -753,6 +812,10 @@ tr.notes-preview-line-active th:first-child {
   opacity: 0; transition: opacity 0.12s;
 }
 .md-td-img:hover .md-img-snap.retake { opacity: 0.9; }
+/* Remove sits in the opposite corner from retake. */
+.md-img-snap.clear { right: auto; left: 3px; }
+.md-img-snap.clear:hover { color: var(--color-danger); border-color: var(--color-danger); }
+.md-img-snap.clear.holding { opacity: 1; color: var(--color-danger); border-color: var(--color-danger); }
 .md-img-snap.busy { opacity: 1; cursor: progress; color: var(--color-accent); animation: md-snap-pulse 0.8s ease-in-out infinite; }
 @keyframes md-snap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 

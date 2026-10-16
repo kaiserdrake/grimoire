@@ -22,6 +22,9 @@
 // Every column is click-to-sort in the rendered table regardless of tokens (see
 // NoteTable.js); the tokens only seed the initial ordering.
 //
+// Plain text cells are editable in place too: double-click one in the preview to
+// edit its raw markdown.
+//
 // Toggling a checkbox or nudging a priority edits the markdown source, so each
 // body cell carries the source offsets of its token (`data-src-start` /
 // `data-src-end`). Offsets are read straight off the source text rather than off
@@ -186,6 +189,24 @@ function annotateCell(cell, kind, src) {
       // capture + upload, in case the note was edited meanwhile.
       props['data-src-text']  = m ? m[0] : '';
     }
+  } else if (start != null) {
+    // Plain text cell: the range covers the cell's trimmed content, so the inline
+    // editor can swap it out. Whether the position includes the cell's pipes
+    // varies, so peel them off here rather than trusting it either way.
+    // A blank cell keeps its whole interior so the edit replaces the padding.
+    const inner0 = src[start] === '|' ? start + 1 : start;
+    let inner1 = Math.max(inner0, end);
+    if (inner1 > inner0 && src[inner1 - 1] === '|' && src[inner1 - 2] !== '\\') inner1--;
+    let a = inner0;
+    let b = inner1;
+    while (a < b && /\s/.test(src[a])) a++;
+    while (b > a && /\s/.test(src[b - 1])) b--;
+    if (a === b) { a = inner0; b = inner1; }
+    props['data-cell-kind'] = 'text';
+    props['data-src-start'] = String(a);
+    props['data-src-end']   = String(b);
+    props['data-src-text']  = src.slice(a, b);
+    props['data-cell-empty'] = src.slice(a, b).trim() ? '0' : '1';
   }
 
   props['data-sort-text'] = cellText(cell);

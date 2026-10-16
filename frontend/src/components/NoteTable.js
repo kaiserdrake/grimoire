@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, Children, cloneElement, isValidElement } from 'react';
+import { useState, useEffect, useRef, Children, cloneElement, isValidElement } from 'react';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiX } from 'react-icons/fi';
+import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiTrash2, FiX } from 'react-icons/fi';
 import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 
 // Custom react-markdown `table` renderer for note tables. Rows can be filtered by
@@ -10,12 +10,15 @@ import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 // to build a multi-column chain), and cells in `:check` / `:prio` columns render
 // interactive controls that write back to the markdown source. Images in `:img`
 // columns render as thumbnails that open full screen, plus a camera button.
+// Plain text cells can be double-clicked to edit their raw markdown in place.
 //
 // The remark plugin in utils/noteTables.js supplies the per-column config and the
 // per-cell sort keys / source offsets this component reads off its children.
 //
-// `onSourceEdit(start, end, text)` replaces that range of the markdown source.
+// `onSourceEdit(start, end, text, expected)` replaces that range of the markdown source.
 // Omitting it (the bulletin preview) renders the controls read-only.
+// `locked` (a locked note) keeps search, checkboxes, priority nudges, snapshots and
+// text-cell edits but turns off adding rows.
 // `onCaptureImage()` resolves to the markdown of a freshly captured image; without
 // it `:img` cells only show their thumbnails.
 
@@ -99,17 +102,107 @@ function Lightbox({ src, alt, onClose }) {
   );
 }
 
+// Corner button on an image cell that removes the image only after being held,
+// so a stray click can't wipe a snapshot. Same timing as the other hold-to-delete
+// buttons in the app.
+const HOLD_DURATION = 1800;
+
+function HoldToClear({ onClear, disabled }) {
+  const [progress, setProgress] = useState(0);
+  const startRef = useRef(null);
+  const rafRef   = useRef(null);
+
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+
+  const reset = () => {
+    cancelAnimationFrame(rafRef.current);
+    startRef.current = null;
+    setProgress(0);
+  };
+
+  const tick = () => {
+    if (!startRef.current) return;
+    const p = Math.min((Date.now() - startRef.current) / HOLD_DURATION, 1);
+    setProgress(p);
+    if (p < 1) rafRef.current = requestAnimationFrame(tick);
+    else { reset(); onClear(); }
+  };
+
+  const start = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (disabled) return;
+    startRef.current = Date.now();
+    rafRef.current = requestAnimationFrame(tick);
+  };
+  const stop = (e) => { e.stopPropagation(); reset(); };
+
+  const holding = progress > 0;
+  const radius = 7;
+  const size = radius * 2 + 3;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <button type="button" className={cx('md-img-snap retake clear', holding && 'holding')}
+      disabled={disabled} title="Hold to remove image"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={start} onMouseUp={stop} onMouseLeave={stop}
+      onTouchStart={start} onTouchEnd={stop} onTouchCancel={stop}>
+      {holding ? (
+        <svg width={size} height={size} style={{ display: 'block' }}>
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeOpacity={0.2} strokeWidth={2} />
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={2}
+            strokeDasharray={circumference} strokeDashoffset={circumference * (1 - progress)}
+            strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+        </svg>
+      ) : (
+        <FiTrash2 size={11} />
+      )}
+    </button>
+  );
+}
+
+// A literal `|` would end the cell, so escape any the author typed unescaped.
+const escapeCellPipes = (text) => text.replace(/\\?\|/g, (m) => (m === '|' ? '\\|' : m));
+
+// Inline editor for one text cell. Enter or blur commits, Escape cancels.
+function CellEditor({ initial, onCommit, onCancel }) {
+  const [val, setVal] = useState(initial);
+  const done = useRef(false);
+  const finish = (commit) => {
+    if (done.current) return;
+    done.current = true;
+    if (commit && val !== initial) onCommit(val); else onCancel();
+  };
+  return (
+    <input
+      className="md-cell-edit"
+      autoFocus
+      value={val}
+      size={Math.max(8, val.length + 1)}
+      onChange={(e) => setVal(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => finish(true)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      }}
+    />
+  );
+}
+
 export default function NoteTable({
   'data-col-kinds':    colKindsAttr   = '',
   'data-search-cols':  searchColsAttr = '',
   'data-sort-spec':    sortSpecAttr   = '',
   'data-row-template': rowTemplate    = '',
   'data-table-end':    tableEndAttr,
-  tableIndex, initialSearch, onSourceEdit, onCaptureImage, children, ...props
+  tableIndex, initialSearch, onSourceEdit, onCaptureImage, locked, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
   const [lightbox, setLightbox] = useState(null);           // { src, alt }
   const [capturing, setCapturing] = useState(() => new Set()); // src-start of cells mid-capture
+  const [editing, setEditing] = useState(null);             // src-start of the text cell being edited
   // Clicking headers overrides the `:sortN` tokens, but editing those tokens in the
   // markdown re-seeds the chain — otherwise the author's change would do nothing
   // until the table remounted.
@@ -185,6 +278,12 @@ export default function NoteTable({
     const canCapture = !!onSourceEdit && !!onCaptureImage && start != null && end != null;
     const busy = capturing.has(start);
     const hasImg = td.props['data-has-img'] === '1';
+    const canClear = !!onSourceEdit && hasImg && start != null && end != null;
+
+    const clear = () => {
+      if (busy) return;
+      onSourceEdit(start, end, '', td.props['data-src-text'] ?? '');
+    };
 
     const capture = async (e) => {
       e.stopPropagation();
@@ -210,8 +309,39 @@ export default function NoteTable({
             <FiCamera size={hasImg ? 11 : 14} />
           </button>
         )}
+        {canClear && <HoldToClear onClear={clear} disabled={busy} />}
       </>,
     );
+  };
+
+  const renderTextCell = (td, start, end) => {
+    if (!onSourceEdit || start == null || end == null) return td;
+    const original = td.props['data-src-text'] ?? '';
+    const blank = td.props['data-cell-empty'] === '1';
+    if (editing === start) {
+      const commit = (text) => {
+        setEditing(null);
+        const next = escapeCellPipes(text.trim());
+        // A blank cell's range spans its whole interior, pipes excluded — pad it.
+        onSourceEdit(start, end, blank ? ` ${next} ` : next, original);
+      };
+      return cloneElement(
+        td,
+        { key: td.key, className: cx(td.props.className, 'md-td-editing') },
+        <CellEditor initial={blank ? '' : original} onCommit={commit} onCancel={() => setEditing(null)} />,
+      );
+    }
+    return cloneElement(td, {
+      key: td.key,
+      className: cx(td.props.className, 'md-td-editable'),
+      title: 'Double-click to edit',
+      onDoubleClick: (e) => {
+        if (e.target.closest?.('a, button, input')) return;
+        e.preventDefault();
+        window.getSelection?.()?.removeAllRanges();
+        setEditing(start);
+      },
+    });
   };
 
   const renderCell = (td) => {
@@ -219,6 +349,7 @@ export default function NoteTable({
     const start = numAttr(td.props['data-src-start']);
     const end   = numAttr(td.props['data-src-end']);
     if (kind === 'img') return renderImageCell(td, start, end);
+    if (kind === 'text') return renderTextCell(td, start, end);
     if (kind !== 'check' && kind !== 'prio') return td;
 
     const editable = !!onSourceEdit && start != null && end != null;
@@ -296,7 +427,7 @@ export default function NoteTable({
 
   // ── Add row ─────────────────────────────────────────────────────────────────
   const tableEnd = numAttr(tableEndAttr);
-  const canAddRow = !!onSourceEdit && tableEnd != null && !!rowTemplate;
+  const canAddRow = !!onSourceEdit && !locked && tableEnd != null && !!rowTemplate;
   const addRow = () => {
     // An active filter would hide the blank row, making the click look like a
     // no-op — so clear it and show the row that was just added.

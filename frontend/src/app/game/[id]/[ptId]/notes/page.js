@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare, FiColumns } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -206,7 +206,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
   const canInsert = (tabIndex === 1 || tabIndex === 3) ? !!file : tabIndex === 2 ? !!url.trim() : false;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} isCentered size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} isCentered size="md" returnFocusOnClose={false}>
       <ModalOverlay backdropFilter="blur(4px)" />
       <ModalContent style={{
         background: 'var(--color-bg-surface)',
@@ -343,8 +343,16 @@ function rehypeSourceLine() {
     }
   };
   return (tree) => {
-    // Top-level blocks (paragraphs, headings, lists, tables, …).
-    for (const node of tree.children || []) tag(node);
+    // Top-level blocks (paragraphs, headings, lists, tables, …). Their full line
+    // range lets render-edit mode swap one block for its raw markdown.
+    for (const node of tree.children || []) {
+      tag(node);
+      const pos = node.type === 'element' && node.position;
+      if (pos?.start?.line && pos?.end?.line) {
+        node.properties['data-block-start'] = pos.start.line;
+        node.properties['data-block-end']   = pos.end.line;
+      }
+    }
     // Also tag table rows so the cursor highlights a single row, not the whole table.
     const visit = (node) => {
       if (node.type === 'element' && node.tagName === 'tr') tag(node);
@@ -352,6 +360,75 @@ function rehypeSourceLine() {
     };
     visit(tree);
   };
+}
+
+// ── Render-edit mode ──────────────────────────────────────────────────────
+// The top-level block being edited is replaced by a <block-editor> element, which
+// markdownComponents renders as a textarea over that block's markdown lines. The
+// rest of the note renders as usual, so list numbering, table indexes and the
+// frontmatter panel are unaffected. Reads a ref because react-markdown re-runs its
+// plugins on every render, and a stable plugin list keeps NoteTable state intact.
+function makeRehypeBlockEditor(targetRef) {
+  return () => (tree) => {
+    const t = targetRef.current;
+    if (!t || t.append) return;
+    tree.children = (tree.children || []).map((node) => (
+      node.type === 'element' && node.position?.start?.line === t.start
+        ? { type: 'element', tagName: 'block-editor', properties: { 'data-start': t.start, 'data-end': t.end }, children: [] }
+        : node
+    ));
+  };
+}
+
+// Inline markdown editor for one block. Blur or Ctrl/Cmd+Enter commits, Escape
+// cancels. Grows with its content. `taRef` exposes the textarea to the toolbar;
+// while `holdRef.current` is set (a toolbar picker or the image modal is open) a
+// blur doesn't commit. `onReady` fires once it's mounted and focused.
+function BlockEditor({ initial, onCommit, onCancel, placeholder, taRef, holdRef, onReady }) {
+  const [val, setVal] = useState(initial);
+  const ref  = useRef(null);
+  const done = useRef(false);
+
+  useEffect(() => {
+    const ta = ref.current;
+    if (!ta) return;
+    if (taRef) taRef.current = ta;
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    onReady?.();
+    return () => { if (taRef && taRef.current === ta) taRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const ta = ref.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight + 2}px`;
+  }, [val]);
+
+  const finish = (commit) => {
+    if (done.current) return;
+    done.current = true;
+    if (commit) onCommit(val); else onCancel();
+  };
+
+  return (
+    <textarea
+      ref={ref}
+      className="notes-block-editor"
+      value={val}
+      rows={1}
+      spellCheck
+      placeholder={placeholder}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => { if (!holdRef?.current) finish(true); }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+        else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+      }}
+    />
+  );
 }
 
 // ── Table of contents helpers ─────────────────────────────────────────────
@@ -365,27 +442,37 @@ function extractHeadings(markdown) {
 }
 
 // ── Markdown toolbar ──────────────────────────────────────────────────────────
-function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, iconGroups, apiBase }) {
-  const apply = (before, after = '', placeholder = '') => {
+// `ensureTarget(fn, wrap)` runs fn once `textareaRef` points at a textarea
+// (render-edit opens a new block first when none is being edited, or applies an
+// inline `wrap` such as bold straight to text selected in the preview). `onPopover(open)` reports a
+// picker opening/closing, so render-edit can keep its block open meanwhile.
+function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, iconGroups, apiBase,
+  ensureTarget = (fn) => fn(), onPopover }) {
+  const apply = (before, after = '', placeholder = '') => ensureTarget(() => {
     if (!textareaRef.current) return;
     insertAtCursor(textareaRef.current, before, after, placeholder);
     onChange(textareaRef.current.value);
-  };
+  }, after ? { before, after } : null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
 
+  const openPicker = (setOpen) => ensureTarget(() => { onPopover?.(true); setOpen(true); });
+  const closePicker = (setOpen) => { setOpen(false); onPopover?.(false); };
+
   const insertBtn = (canonical) => {
-    if (!textareaRef.current) return;
-    insertAtCursor(textareaRef.current, `:btn[${canonical}]`);
-    onChange(textareaRef.current.value);
-    setPickerOpen(false);
+    if (textareaRef.current) {
+      insertAtCursor(textareaRef.current, `:btn[${canonical}]`);
+      onChange(textareaRef.current.value);
+    }
+    closePicker(setPickerOpen);
   };
 
   const insertIcon = (token) => {
-    if (!textareaRef.current) return;
-    insertAtCursor(textareaRef.current, `:icon[${token}]`);
-    onChange(textareaRef.current.value);
-    setIconPickerOpen(false);
+    if (textareaRef.current) {
+      insertAtCursor(textareaRef.current, `:icon[${token}]`);
+      onChange(textareaRef.current.value);
+    }
+    closePicker(setIconPickerOpen);
   };
 
   const ITEMS = [
@@ -419,12 +506,15 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       '\n```tier\nS: \nA: \nB: \nC: \nD: \nUnranked: \n```\n'
     )},
     null,
-    { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => setPickerOpen(o => !o) },
-    { icon: <FiTag size={12} />, label: 'Insert preset icon', action: () => setIconPickerOpen(o => !o) },
+    { icon: <BsController size={12} />, label: 'Insert gamepad button', action: () => openPicker(setPickerOpen) },
+    { icon: <FiTag size={12} />, label: 'Insert preset icon', action: () => openPicker(setIconPickerOpen) },
   ];
 
   return (
-    <div className="notes-toolbar" style={{ position: 'relative' }}>
+    // Buttons don't take focus, so the textarea keeps its selection (and an open
+    // render-edit block doesn't commit on blur).
+    <div className="notes-toolbar" style={{ position: 'relative' }}
+      onMouseDown={(e) => { if (e.target.closest?.('.notes-toolbar-btn')) e.preventDefault(); }}>
       {ITEMS.map((item, i) =>
         item === null
           ? <div key={i} className="notes-toolbar-sep" />
@@ -438,7 +528,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
         <GamepadPicker
           platform={platform}
           onInsert={insertBtn}
-          onClose={() => setPickerOpen(false)}
+          onClose={() => closePicker(setPickerOpen)}
         />
       )}
       {iconPickerOpen && (
@@ -446,7 +536,7 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
           iconGroups={iconGroups}
           apiBase={apiBase}
           onInsert={insertIcon}
-          onClose={() => setIconPickerOpen(false)}
+          onClose={() => closePicker(setIconPickerOpen)}
         />
       )}
     </div>
@@ -709,6 +799,15 @@ export default function NotesPage({ params }) {
     try { return JSON.parse(localStorage.getItem('grimoire:notesLocked') || '{}') || {}; }
     catch { return {}; }
   });
+  // How an unlocked note is edited: 'split' (markdown editor beside the preview) or
+  // 'render' (edit blocks in place in the preview). Global, not per file.
+  const [editMode, setEditMode]             = useState(() => {
+    if (typeof window === 'undefined') return 'split';
+    try { return localStorage.getItem('grimoire:notesEditMode') === 'render' ? 'render' : 'split'; }
+    catch { return 'split'; }
+  });
+  // Render-edit target: { start, end, original } line range, or { append: true }.
+  const [editBlock, setEditBlock]           = useState(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [drawerOpen, setDrawerOpen]         = useState(false);
@@ -737,6 +836,10 @@ export default function NotesPage({ params }) {
   const lastNavSlug      = useRef(null); // last heading slug auto-scrolled from the URL
   const contentRef       = useRef(content); // kept in sync below — lets markdownComponents read latest content without being a dep
   const isPresentModeRef = useRef(false);
+  const editBlockRef     = useRef(null);
+  const blockTaRef       = useRef(null);  // textarea of the open render-edit block
+  const blockHoldRef     = useRef(false); // keeps that block open while a picker/modal has focus
+  const pendingToolRef   = useRef(null);  // toolbar action waiting for a block to open
 
   // Keep contentRef current so markdownComponents can read it without being recreated.
   contentRef.current = content;
@@ -748,6 +851,16 @@ export default function NotesPage({ params }) {
     ? isPresentModeRef.current
     : !!(activeFileId != null && lockedFiles[activeFileId]);
   if (!isLoadingFile) isPresentModeRef.current = isPresentMode;
+  const isRenderEdit = !isPresentMode && editMode === 'render';
+  editBlockRef.current = editBlock;
+
+  const changeEditMode = (mode) => {
+    setEditMode(mode);
+    try { localStorage.setItem('grimoire:notesEditMode', mode); } catch {}
+  };
+
+  // Drop an open block editor when the note or the mode changes underneath it.
+  useEffect(() => { setEditBlock(null); }, [activeFileId, isRenderEdit]);
 
   const toggleLocked = () => {
     if (activeFileId == null) return;
@@ -778,6 +891,22 @@ export default function NotesPage({ params }) {
     if (!el) return;
     setActiveLine(Number(el.getAttribute('data-source-line')));
   }, [isPresentMode]);
+
+  // Render-edit: double-click a top-level block to edit its markdown in place.
+  // Controls inside the preview (table cells, checkboxes, links…) keep their own
+  // double-click; a handled one calls preventDefault.
+  const handlePreviewDoubleClick = useCallback((e) => {
+    if (!isRenderEdit || e.defaultPrevented) return;
+    if (e.target.closest?.('input, textarea, button, select, a')) return;
+    const el = e.target.closest?.('[data-block-start]');
+    if (!el || !previewRef.current?.contains(el)) return;
+    const start = Number(el.getAttribute('data-block-start'));
+    const end   = Number(el.getAttribute('data-block-end'));
+    if (!start || !end) return;
+    e.preventDefault();
+    window.getSelection?.()?.removeAllRanges();
+    setEditBlock({ start, end, original: contentRef.current.split('\n').slice(start - 1, end).join('\n') });
+  }, [isRenderEdit]);
 
   // Highlight the top-level preview block that contains the cursor line.
   useEffect(() => {
@@ -939,18 +1068,132 @@ export default function NotesPage({ params }) {
   }, [applySourceChange]);
 
   // Replace a source range [start, end) — used by note-table checkbox toggles and
-  // priority nudges, which carry the offsets of their token in the markdown.
+  // priority nudges, which carry the offsets of their token in the markdown, and by
+  // inline text-cell edits.
   // `expected`, when given, is what the range must still hold — async writers (the
-  // table camera button) pass it so an edit made while they waited isn't clobbered.
+  // table camera button, the cell editor) pass it so an edit made while they waited
+  // isn't clobbered.
   const persistSourceRange = useCallback((start, end, text, expected) => {
     if (!Number.isInteger(start) || !Number.isInteger(end)) return;
     const cur = contentRef.current;
     if (expected != null && cur.slice(start, end) !== expected) {
-      toast({ title: 'Note changed while capturing — snapshot not inserted', status: 'warning', duration: 3000 });
+      toast({ title: 'Note changed meanwhile — table edit not applied', status: 'warning', duration: 3000 });
       return;
     }
     applySourceChange(cur.slice(0, start) + text + cur.slice(end));
   }, [applySourceChange, toast]);
+
+  // Render-edit commit: swap lines [start, end] for the edited text. Bails if those
+  // lines changed since editing began (e.g. a checkbox toggled meanwhile).
+  const commitBlock = useCallback((target, text) => {
+    setEditBlock(null);
+    const { start, end, original } = target;
+    if (text === original) return;
+    const lines = contentRef.current.split('\n');
+    if (lines.slice(start - 1, end).join('\n') !== original) {
+      toast({ title: 'Note changed meanwhile — block edit not applied', status: 'warning', duration: 3000 });
+      return;
+    }
+    const replacement = text.replace(/\n+$/, '');
+    applySourceChange([
+      ...lines.slice(0, start - 1),
+      ...(replacement ? replacement.split('\n') : []),
+      ...lines.slice(end),
+    ].join('\n'));
+  }, [applySourceChange, toast]);
+
+  // Render-edit "Add block": append a new block to the end of the note.
+  const appendBlock = useCallback((text) => {
+    setEditBlock(null);
+    const add = text.replace(/\n+$/, '');
+    if (!add.trim()) return;
+    const cur = contentRef.current.replace(/\s+$/, '');
+    applySourceChange(cur ? `${cur}\n\n${add}\n` : `${add}\n`);
+  }, [applySourceChange]);
+
+  // Render-edit toolbar plumbing. A toolbar action with no block open starts a new
+  // block at the end of the note and runs once that editor is mounted.
+  // The toolbar types into whichever preview editor has focus — an open table-cell
+  // editor or a block editor — falling back to the open block editor.
+  const toolTargetRef = useMemo(() => ({
+    get current() {
+      const a = typeof document !== 'undefined' ? document.activeElement : null;
+      if (a && previewRef.current?.contains(a) && a.matches?.('.md-cell-edit, .notes-block-editor')) return a;
+      return blockTaRef.current;
+    },
+  }), []);
+
+  // Bold/italic/code with text selected in the rendered preview (nothing open in an
+  // editor): find that text in the source of its table cell or block and wrap it.
+  // Repeated text is told apart by counting earlier occurrences in the rendered text.
+  const wrapPreviewSelection = useCallback(({ before, after }) => {
+    const sel = window.getSelection?.();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    const range = sel.getRangeAt(0);
+    const root = previewRef.current;
+    if (!root?.contains(range.commonAncestorContainer)) return false;
+    const raw = sel.toString();
+    const text = raw.trim();
+    if (!text || text.includes('\n')) return false;
+
+    const anchor = range.commonAncestorContainer.nodeType === 1
+      ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+    const el = anchor?.closest?.('td[data-cell-kind="text"][data-src-start], [data-block-start]');
+    if (!el) return false;
+
+    const src = contentRef.current;
+    let from, to;
+    if (el.hasAttribute('data-src-start')) {
+      from = Number(el.getAttribute('data-src-start'));
+      to   = Number(el.getAttribute('data-src-end'));
+    } else {
+      const lines = src.split('\n');
+      const startLine = Number(el.getAttribute('data-block-start'));
+      const endLine   = Number(el.getAttribute('data-block-end'));
+      from = lines.slice(0, startLine - 1).reduce((n, l) => n + l.length + 1, 0);
+      to   = from + lines.slice(startLine - 1, endLine).join('\n').length;
+    }
+    if (!Number.isInteger(from) || !Number.isInteger(to)) return false;
+
+    // Which occurrence of `text` in the rendered element the selection is.
+    const pre = document.createRange();
+    pre.setStart(el, 0);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const selStart = pre.toString().length + (raw.length - raw.trimStart().length);
+    const rendered = el.textContent || '';
+    let nth = 0;
+    for (let i = rendered.indexOf(text); i !== -1 && i < selStart; i = rendered.indexOf(text, i + text.length)) nth++;
+
+    const slice = src.slice(from, to);
+    let at = -1;
+    for (let i = 0, pos = slice.indexOf(text); pos !== -1; i++, pos = slice.indexOf(text, pos + text.length)) {
+      at = pos;
+      if (i === nth) break;
+    }
+    if (at === -1) {
+      toast({ title: 'Could not find the selected text in the markdown — double-click to edit it', status: 'info', duration: 3000 });
+      return true;
+    }
+    sel.removeAllRanges();
+    persistSourceRange(from + at, from + at + text.length, before + text + after, text);
+    return true;
+  }, [persistSourceRange, toast]);
+
+  const ensureBlockTarget = useCallback((fn, wrap) => {
+    if (toolTargetRef.current) { fn(); return; }
+    if (wrap && wrapPreviewSelection(wrap)) return;
+    pendingToolRef.current = fn;
+    setEditBlock({ append: true });
+  }, [toolTargetRef, wrapPreviewSelection]);
+  const handleBlockReady = useCallback(() => {
+    const fn = pendingToolRef.current;
+    pendingToolRef.current = null;
+    fn?.();
+  }, []);
+  const holdBlock = useCallback((open) => {
+    blockHoldRef.current = open;
+    if (!open) blockTaRef.current?.focus();
+  }, []);
 
   // One-click snapshot for `:img` table cells: grab a frame from the remembered
   // camera, upload it to the game's notes attachments, hand back its markdown.
@@ -1002,6 +1245,10 @@ export default function NotesPage({ params }) {
   }, [content, searchParams, navigateSection]);
 
   const handleImageInsert = (markdown) => {
+    if (isRenderEdit && toolTargetRef.current) {
+      insertAtCursor(toolTargetRef.current, markdown);
+      return;
+    }
     const ta = textareaRef.current;
     if (ta) {
       insertAtCursor(ta, markdown);
@@ -1118,7 +1365,7 @@ export default function NotesPage({ params }) {
     () => [remarkGfm, remarkFrontmatter, makeRemarkFrontmatterPlugin(), remarkDirective, makeRemarkMetaPlugin(), makeRemarkNoteTablePlugin(), makeRemarkGamepadPlugin(gamepad), makeRemarkNoteIconPlugin(iconMap)],
     [gamepad, iconMap],
   );
-  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds], []);
+  const rehypePlugins = useMemo(() => [rehypeRaw, rehypeSourceLine, rehypeHeadingIds, makeRehypeBlockEditor(editBlockRef)], []);
   // Headings render with a hover "#" anchor that copies a deep-link to the section
   // (and scrolls to it). The id is assigned by rehypeHeadingIds. Works in locked /
   // present mode too, since the preview is the visible pane there.
@@ -1172,7 +1419,7 @@ export default function NotesPage({ params }) {
       // `st` as a convenience alias for the first table.
       const fromUrl = searchParams.get(`st${idx}`) ?? (idx === 1 ? searchParams.get('st') : null);
       const init = props['data-search-cols'] ? (fromUrl ?? '') : '';
-      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} onCaptureImage={captureTableImage} {...props} />;
+      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} onCaptureImage={captureTableImage} locked={isPresentMode} {...props} />;
     },
     pre: ({ node, children, ...props }) => {
       const codeEl = node?.children?.[0];
@@ -1180,19 +1427,27 @@ export default function NotesPage({ params }) {
       if (Array.isArray(cls) && cls.includes('language-tier')) {
         const raw = (codeEl.children?.[0]?.value || '').replace(/\n$/, '');
         return (
-          <TierList
-            raw={raw}
-            iconMap={iconMap}
-            headings={extractHeadings(contentRef.current).map(h => ({ ...h, slug: slugify(h.text) }))}
-            position={node.position}
-            onPersist={persistTierBlock}
-            onNavigateSection={navigateSection}
-          />
+          <div data-block-start={props['data-block-start']} data-block-end={props['data-block-end']}>
+            <TierList
+              raw={raw}
+              iconMap={iconMap}
+              headings={extractHeadings(contentRef.current).map(h => ({ ...h, slug: slugify(h.text) }))}
+              position={node.position}
+              onPersist={isPresentMode ? undefined : persistTierBlock}
+              onNavigateSection={navigateSection}
+            />
+          </div>
         );
       }
       return <pre {...props}>{children}</pre>;
     },
-  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, captureTableImage, navigateSection]);
+    'block-editor': () => {
+      const target = editBlockRef.current;
+      if (!target || target.append) return null;
+      return <BlockEditor initial={target.original} onCommit={(text) => commitBlock(target, text)} onCancel={() => setEditBlock(null)}
+        taRef={blockTaRef} holdRef={blockHoldRef} onReady={handleBlockReady} />;
+    },
+  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, captureTableImage, navigateSection, isPresentMode, commitBlock, handleBlockReady]);
 
   if (!user) return (
     <>
@@ -1328,6 +1583,20 @@ export default function NotesPage({ params }) {
                       />
                     </Tooltip>
                   )}
+                  {!isPresentMode && (
+                    <HStack spacing={0} className="notes-mode-switch">
+                      <Tooltip label="Side by side: markdown editor + preview">
+                        <IconButton icon={<FiColumns size={12} />} size="xs" aria-label="Side-by-side editing"
+                          onClick={() => changeEditMode('split')}
+                          className={editMode === 'split' ? 'active' : undefined} />
+                      </Tooltip>
+                      <Tooltip label="Render edit: double-click a block to edit it">
+                        <IconButton icon={<FiEdit3 size={12} />} size="xs" aria-label="Render editing"
+                          onClick={() => changeEditMode('render')}
+                          className={editMode === 'render' ? 'active' : undefined} />
+                      </Tooltip>
+                    </HStack>
+                  )}
                   <Button size="xs"
                     leftIcon={isPresentMode ? <FiUnlock size={11} /> : <FiLock size={11} />}
                     onClick={toggleLocked}
@@ -1340,9 +1609,22 @@ export default function NotesPage({ params }) {
                 </HStack>
               </div>
 
+              {isRenderEdit && (
+                <MarkdownToolbar
+                  textareaRef={toolTargetRef}
+                  onChange={() => {}}
+                  onOpenImageModal={() => ensureBlockTarget(() => { holdBlock(true); setImageModalOpen(true); })}
+                  ensureTarget={ensureBlockTarget}
+                  onPopover={holdBlock}
+                  platform={gamepad}
+                  iconGroups={iconGroups}
+                  apiBase={apiBase}
+                />
+              )}
+
               {/* ── Split pane: editor left, preview right ── */}
               <div className="notes-split-pane" style={isLoadingFile ? { opacity: 0, pointerEvents: 'none' } : undefined}>
-                {!isPresentMode && <div className="notes-editor-body">
+                {!isPresentMode && !isRenderEdit && <div className="notes-editor-body">
                   <MarkdownToolbar
                     textareaRef={textareaRef}
                     onChange={(val) => {
@@ -1372,19 +1654,31 @@ export default function NotesPage({ params }) {
                   />
                 </div>}
 
-                {!isPresentMode && <div className="notes-split-divider" />}
+                {!isPresentMode && !isRenderEdit && <div className="notes-split-divider" />}
 
-                <div ref={previewRef} className="notes-preview-content notes-preview-split"
+                <div ref={previewRef}
+                  className={`notes-preview-content notes-preview-split${isRenderEdit ? ' notes-render-edit' : ''}`}
                   style={{ zoom: `${previewZoom}%`, cursor: isPresentMode ? 'pointer' : undefined }}
-                  onClick={handlePreviewClick}>
+                  onClick={handlePreviewClick}
+                  onDoubleClick={handlePreviewDoubleClick}>
                   {content.trim()
                     ? (tableCounterRef.current = 0, <ReactMarkdown
                         remarkPlugins={remarkPlugins}
                         rehypePlugins={rehypePlugins}
                         components={markdownComponents}
                       >{content}</ReactMarkdown>)
-                    : <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>
+                    : !isRenderEdit && <Text style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Nothing to preview yet…</Text>
                   }
+                  {isRenderEdit && (editBlock?.append
+                    ? <BlockEditor initial="" placeholder="Write markdown…  (Ctrl+Enter to finish, Esc to cancel)"
+                        onCommit={appendBlock} onCancel={() => setEditBlock(null)}
+                        taRef={blockTaRef} holdRef={blockHoldRef} onReady={handleBlockReady} />
+                    : (
+                      <button type="button" className="notes-add-block"
+                        onClick={(e) => { e.stopPropagation(); setEditBlock({ append: true }); }}>
+                        <FiPlus size={11} /> {content.trim() ? 'Add block' : 'Start writing'}
+                      </button>
+                    ))}
                 </div>
 
                 {/* TOC drawer + pull tab */}
@@ -1434,7 +1728,7 @@ export default function NotesPage({ params }) {
       <MarkdownHelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
       <ImageUploadModal
         isOpen={imageModalOpen}
-        onClose={() => setImageModalOpen(false)}
+        onClose={() => { setImageModalOpen(false); if (blockHoldRef.current) holdBlock(false); }}
         onInsert={handleImageInsert}
         gameId={id}
       />

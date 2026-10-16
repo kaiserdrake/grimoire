@@ -60,6 +60,8 @@ export default function TierList({ raw, iconMap = {}, headings = [], position, o
   const [editor, setEditor] = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
+  // Without `onPersist` (locked notes) the list is read-only: no drag, no editing.
+  const editable = !!onPersist;
   const commit = (nextRows) => onPersist?.(position, serializeRows(nextRows));
 
   const moveItem = (fromLabel, fromIdx, toLabel) => {
@@ -109,7 +111,7 @@ export default function TierList({ raw, iconMap = {}, headings = [], position, o
     <div
       key={`${label}-${idx}`}
       className="tier-item"
-      draggable
+      draggable={editable}
       onDragStart={(e) => e.dataTransfer.setData('text/plain', JSON.stringify({ fromLabel: label, fromIdx: idx }))}
     >
       {item.icon && (iconMap[item.icon]
@@ -122,9 +124,11 @@ export default function TierList({ raw, iconMap = {}, headings = [], position, o
       {item.text && (item.slug
         ? <a className="tier-item-link" onClick={() => onNavigateSection?.(item.slug)}>{item.text}</a>
         : <span className="tier-item-text">{item.text}</span>)}
-      <button className="tier-item-edit" title="Edit" onClick={() => setEditor({ mode: 'edit', label, idx })}>
-        <FiEdit2 size={11} />
-      </button>
+      {editable && (
+        <button className="tier-item-edit" title="Edit" onClick={() => setEditor({ mode: 'edit', label, idx })}>
+          <FiEdit2 size={11} />
+        </button>
+      )}
     </div>
   );
 
@@ -150,9 +154,11 @@ export default function TierList({ raw, iconMap = {}, headings = [], position, o
 
       <div className="tier-tray-header">
         <span>{TRAY_LABEL}</span>
-        <button className="tier-add-btn" onClick={() => setEditor({ mode: 'new' })}>
-          <FiPlus size={12} /> Add item
-        </button>
+        {editable && (
+          <button className="tier-add-btn" onClick={() => setEditor({ mode: 'new' })}>
+            <FiPlus size={12} /> Add item
+          </button>
+        )}
       </div>
       <div
         className={`tier-tray${dragOver === TRAY_LABEL ? ' tier-drop-over' : ''}`}

@@ -19,7 +19,8 @@ const persistId = (id) => {
 // Grab a single frame from the remembered camera without any UI: open the stream,
 // wait for a decoded frame, draw it, release the camera. Used by note tables'
 // one-click snapshot cells. Resolves to a JPEG File; rejects with a readable
-// message. Pick the camera once via the Insert image → Camera tab.
+// message. Pick the camera in the game Settings tab (Snapshot Camera) or the
+// Insert image → Camera tab.
 export async function captureCameraFrame() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Camera is not available in this browser, or the page is not served over HTTPS.');
@@ -273,6 +274,136 @@ export default function CameraCapture({ active, onCapture }) {
             </Button>
           )}
         </HStack>
+      )}
+    </Box>
+  );
+}
+
+// ── Snapshot camera setting ───────────────────────────────────────────────────
+// Standalone picker for the camera used by captureCameraFrame(), so the quick
+// snapshot can be configured without opening the Insert image dialog. Shares the
+// same localStorage key as the Camera tab, so either place updates both.
+// Device labels stay blank until camera permission is granted; "Detect cameras"
+// requests it once (and releases the stream immediately) to reveal them.
+export function SnapshotCameraSetting() {
+  const [devices,  setDevices]  = useState([]);    // videoinput MediaDeviceInfo[]
+  const [savedId,  setSavedId]  = useState('');
+  const [busy,     setBusy]     = useState(false);
+  const [error,    setError]    = useState('');
+  const [preview,  setPreview]  = useState(null);
+  const previewRef = useRef(null);
+
+  const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const hasLabels = devices.some(d => d.label);
+
+  const refresh = async () => {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setDevices(list.filter(d => d.kind === 'videoinput'));
+    } catch { /* enumeration is best-effort */ }
+  };
+
+  const clearPreview = () => {
+    if (previewRef.current) { URL.revokeObjectURL(previewRef.current); previewRef.current = null; }
+    setPreview(null);
+  };
+
+  useEffect(() => {
+    setSavedId(readSavedId() || '');
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    refresh();
+    // Keep the list current when cameras are plugged in or removed.
+    navigator.mediaDevices.addEventListener?.('devicechange', refresh);
+    return () => {
+      navigator.mediaDevices.removeEventListener?.('devicechange', refresh);
+      clearPreview();
+    };
+  }, []);
+
+  const detect = async () => {
+    setError(''); setBusy(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach(t => t.stop());
+      await refresh();
+    } catch (err) {
+      setError(err?.name === 'NotAllowedError' ? 'Camera permission was denied.' : 'Unable to access the camera.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    const id = e.target.value;
+    persistId(id || null);
+    setSavedId(id);
+    setError('');
+    clearPreview();
+  };
+
+  const test = async () => {
+    setError(''); setBusy(true); clearPreview();
+    try {
+      const file = await captureCameraFrame();
+      const url = URL.createObjectURL(file);
+      previewRef.current = url;
+      setPreview(url);
+      // captureCameraFrame() forgets a camera that's gone; reflect that here.
+      setSavedId(readSavedId() || '');
+      await refresh();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!supported) {
+    return (
+      <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>
+        Camera is not available in this browser, or the page is not served over HTTPS.
+      </Text>
+    );
+  }
+
+  const savedMissing = savedId && devices.length > 0 && !devices.some(d => d.deviceId === savedId);
+  const selectStyle = { background: 'var(--color-bg-subtle)', borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
+
+  return (
+    <Box>
+      <HStack spacing={2} align="center" wrap="wrap">
+        <Select size="xs" maxW="320px" value={savedId} onChange={handleChange}
+          aria-label="Snapshot camera" style={selectStyle}>
+          <option value="" style={{ background: 'var(--color-bg-surface)' }}>Browser default</option>
+          {devices.map((d, i) => (
+            <option key={d.deviceId || i} value={d.deviceId} style={{ background: 'var(--color-bg-surface)' }}>
+              {d.label || `Camera ${i + 1}`}
+            </option>
+          ))}
+          {savedMissing && (
+            <option value={savedId} style={{ background: 'var(--color-bg-surface)' }}>Saved camera (not connected)</option>
+          )}
+        </Select>
+        {!hasLabels && (
+          <Button size="xs" variant="outline" leftIcon={<FiRefreshCw size={11} />} onClick={detect} isDisabled={busy}>
+            Detect cameras
+          </Button>
+        )}
+        <Button size="xs" variant="outline" leftIcon={busy ? <Spinner size="xs" /> : <FiCamera size={11} />}
+          onClick={test} isDisabled={busy}>
+          Test snapshot
+        </Button>
+      </HStack>
+
+      {error && (
+        <Text fontSize="xs" mt={2} style={{ color: 'var(--color-danger)' }}>{error}</Text>
+      )}
+
+      {preview && (
+        <Box mt={2} maxW="240px" borderRadius="var(--radius-md)" overflow="hidden"
+          style={{ border: '1px solid var(--color-border-subtle)' }}>
+          <img src={preview} alt="Test snapshot" style={{ width: '100%', display: 'block' }} />
+        </Box>
       )}
     </Box>
   );

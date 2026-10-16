@@ -6,11 +6,12 @@ import {
   Input, Select, Tooltip, useToast,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiCheck } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiCheck, FiCamera } from 'react-icons/fi';
 import Navbar from '@/components/Navbar';
 import GameTabBar from '@/components/GameTabBar';
 import GameDetailModal from '@/components/GameDetailModal';
 import RecentDrawer from '@/components/RecentDrawer';
+import { SnapshotCameraSetting } from '@/components/CameraCapture';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { PIN_COLORS, PIN_TYPES, PinIcon } from '@/constants/pins';
@@ -378,6 +379,15 @@ export default function GameSettingsPage({ params }) {
             >
               Add group
             </Button>
+          </Section>
+
+          {/* ── Snapshot Camera ── */}
+          <Section
+            icon={FiCamera}
+            title="Snapshot Camera"
+            description="Camera used by one-click snapshot cells in note tables (;img). Saved for this browser on this device, so it applies to every game. Use Test snapshot to check the framing."
+          >
+            <SnapshotCameraSetting />
           </Section>
 
           {/* ── Map Defaults ── */}
