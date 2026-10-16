@@ -4,6 +4,7 @@ import { Box } from '@chakra-ui/react';
 import { PT_STATUS_LABELS, PT_STATUS_STYLE } from '@/constants/playthroughs';
 import { TAG_STYLE } from '@/constants/tags';
 import { ptDisplayLabel } from '@/utils/playthroughs';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 
 const s = {
   muted: { margin: 0, fontSize: '0.75rem', lineHeight: '1.4', color: 'var(--color-text-muted)' },
@@ -53,22 +54,12 @@ export default function GameListRow({ game, onClick }) {
     >
       {/* Cover */}
       <div className="game-list-row-cover">
-        {game.cover_url ? (
-          <img
-            src={game.cover_url}
-            alt={game.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        ) : (
-
-          <div style={{
-            width: '100%', height: '100%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.5rem', background: 'var(--color-bg-subtle)',
-          }}>
-            🎮
-          </div>
-        )}
+        <img
+          src={coverSrc(game.cover_url)}
+          alt={game.title}
+          onError={fallbackToGenericCover}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
       </div>
 
       {/* Content */}

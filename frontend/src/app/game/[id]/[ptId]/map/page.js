@@ -161,13 +161,14 @@ function HoldToDelete({ onDelete, inMap = false }) {
         border="none"
         cursor="pointer"
         background="transparent"
-        style={inMap ? { width: '22px', height: '22px', transition: 'color 0.15s, background 0.15s' } : {}}
+        style={inMap
+          ? { width: '22px', height: '22px', padding: 2, transition: 'color 0.15s, background 0.15s' }
+          : { padding: 2, transition: 'color 0.15s' }}
         color={holding
           ? (inMap ? 'rgba(255,120,120,0.9)' : 'var(--color-danger)')
           : (inMap ? 'rgba(255,255,255,0.45)' : 'var(--color-text-muted)')}
         onMouseDown={start} onMouseUp={stop} onMouseLeave={stop}
         onTouchStart={start} onTouchEnd={stop}
-        style={{ padding: 2, transition: 'color 0.15s' }}
       >
         <svg width={svgSize} height={svgSize} style={{ overflow: 'visible' }}>
           <circle cx={svgSize/2} cy={svgSize/2} r={radius}

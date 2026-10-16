@@ -7,6 +7,7 @@ import {
   Badge, Tooltip, Button, Input, useToast,
 } from '@chakra-ui/react';
 import { api } from '@/utils/api';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const ClockIcon = () => (
@@ -19,12 +20,6 @@ const ControllerIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="6" width="20" height="12" rx="2"/>
     <path d="M6 12h4M8 10v4"/><circle cx="16" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="13" r="1" fill="currentColor"/>
-  </svg>
-);
-
-const StarIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
   </svg>
 );
 
@@ -273,7 +268,6 @@ const CARD_H = '120px';
 const ActiveGameCard = ({ game }) => {
   const activePT    = (game.playthroughs || []).find(pt => pt.status === 'playing' || pt.status === 'pend');
   const status      = activePT?.status ?? 'playing';
-  const hasCover    = !!game.cover_url;
   const statusColor = status === 'playing' ? '#4a90d9' : '#999999';
   const statusLabel = status === 'playing' ? 'PLAYING' : 'PENDED';
 
@@ -287,16 +281,10 @@ const ActiveGameCard = ({ game }) => {
         bg="var(--color-surface-hover)"
         mb={1.5}
       >
-        {hasCover ? (
-          <Box as="img" src={game.cover_url} alt={game.title}
-            position="absolute" inset={0} w="100%" h="100%"
-            style={{ objectFit: 'cover' }}
-          />
-        ) : (
-          <Flex w="100%" h="100%" align="center" justify="center">
-            <Box color="var(--color-text-muted)"><StarIcon /></Box>
-          </Flex>
-        )}
+        <Box as="img" src={coverSrc(game.cover_url)} alt={game.title} onError={fallbackToGenericCover}
+          position="absolute" inset={0} w="100%" h="100%"
+          style={{ objectFit: 'cover' }}
+        />
         {/* Status pill overlay — top-left */}
         <Box
           position="absolute" top="5px" left="5px"
@@ -552,27 +540,18 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                     align="flex-start"
                   >
                     {/* Large cover card */}
-                    {top.cover_url ? (
-                      <Box
-                        as="img"
-                        src={top.cover_url}
-                        alt={top.title}
-                        w="90px"
-                        h="120px"
-                        borderRadius="7px"
-                        objectFit="cover"
-                        flexShrink={0}
-                        boxShadow="0 4px 16px rgba(0,0,0,0.35)"
-                      />
-                    ) : (
-                      <Box
-                        w="90px" h="120px" borderRadius="7px" flexShrink={0}
-                        bg="var(--color-surface-hover)"
-                        display="flex" alignItems="center" justifyContent="center"
-                      >
-                        <Box color="var(--color-text-muted)"><StarIcon /></Box>
-                      </Box>
-                    )}
+                    <Box
+                      as="img"
+                      src={coverSrc(top.cover_url)}
+                      alt={top.title}
+                      onError={fallbackToGenericCover}
+                      w="90px"
+                      h="120px"
+                      borderRadius="7px"
+                      objectFit="cover"
+                      flexShrink={0}
+                      boxShadow="0 4px 16px rgba(0,0,0,0.35)"
+                    />
 
                     {/* Details */}
                     <Box flex={1} minW={0} pt={0.5}>

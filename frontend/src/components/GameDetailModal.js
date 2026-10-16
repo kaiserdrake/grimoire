@@ -18,6 +18,7 @@ import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
 import RatingPopover from '@/components/RatingPopover';
 import { TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon } from '@/constants/tags';
 import { ptDisplayLabel } from '@/utils/playthroughs';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 
 const info = (color = 'var(--color-text-muted)') => ({
   margin: 0, fontSize: '0.75rem', lineHeight: '1.4', color,
@@ -672,7 +673,7 @@ function SyncPanel({ game, onSynced, onCancel }) {
           <HStack spacing={2} py={2}>
             <Spinner size="xs" color="var(--color-accent)" />
             <Text fontSize="xs" color="var(--color-text-muted)" m={0}>
-              Searching IGDB for "{game.title}"…
+              Searching IGDB for &ldquo;{game.title}&rdquo;…
             </Text>
           </HStack>
         )}
@@ -735,15 +736,8 @@ function SyncCandidate({ candidate, selected, onClick }) {
       transition="all 0.15s"
     >
       <HStack spacing={2} align="start">
-        {candidate.cover_url ? (
-          <Image src={candidate.cover_url} alt={candidate.title}
-            w="32px" h="42px" objectFit="cover" borderRadius="sm" flexShrink={0} />
-        ) : (
-          <Box w="32px" h="42px" bg="var(--color-bg-hover)" borderRadius="sm"
-            display="flex" alignItems="center" justifyContent="center" flexShrink={0} fontSize="md">
-            🎮
-          </Box>
-        )}
+        <Image src={coverSrc(candidate.cover_url)} alt={candidate.title} onError={fallbackToGenericCover}
+          w="32px" h="42px" objectFit="cover" borderRadius="sm" flexShrink={0} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-primary)' }}>
             {candidate.title}
@@ -1196,15 +1190,8 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
           <VStack spacing={4} align="stretch">
             {/* Cover + core info + synopsis */}
             <HStack spacing={4} align="stretch">
-              {game.cover_url ? (
-                <Image src={game.cover_url} alt={game.title} borderRadius="md"
-                  w="180px" h="240px" objectFit="cover" flexShrink={0} />
-              ) : (
-                <Box w="180px" h="240px" borderRadius="md" bg="var(--color-bg-subtle)"
-                  display="flex" alignItems="center" justifyContent="center" fontSize="2xl" flexShrink={0}>
-                  🎮
-                </Box>
-              )}
+              <Image src={coverSrc(game.cover_url)} alt={game.title} onError={fallbackToGenericCover} borderRadius="md"
+                w="180px" h="240px" objectFit="cover" flexShrink={0} />
               <VStack align="start" spacing={1} flex={1} minW={0} h="240px">
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                   {firstReleaseYear && <span style={info()}>{firstReleaseYear}</span>}

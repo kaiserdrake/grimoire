@@ -123,7 +123,7 @@ export default function NotesDrawer({ isOpen, onToggle, activeTab, onTabChange, 
           <div className="recent-drawer-body">
             {activeTab === 'recent' ? (
               recentGames.length === 0 ? (
-                <span className="recent-drawer-empty">Open a game's Notes or Map to see it here.</span>
+                <span className="recent-drawer-empty">Open a game&apos;s Notes or Map to see it here.</span>
               ) : (
                 recentGames.map((entry) => (
                   <RecentGameRow
@@ -405,7 +405,7 @@ function BulletinReadModal({ post, loading, onClose }) {
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (
-                  <div className="img-resizer"><img {...props} /></div>
+                  <div className="img-resizer"><img alt="" {...props} /></div>
                 ),
               }}
             >{post.content}</ReactMarkdown>

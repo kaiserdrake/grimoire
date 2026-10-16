@@ -131,7 +131,7 @@ export default function RecentDrawer({ isOpen, onToggle }) {
 
               recentGames.length === 0 ? (
                 <span className="recent-drawer-empty">
-                  Open a game's Notes or Map to see it here.
+                  Open a game&apos;s Notes or Map to see it here.
                 </span>
               ) : (
                 recentGames.map((entry) => (
@@ -439,7 +439,7 @@ function BulletinReadModal({ post, loading, onClose }) {
               rehypePlugins={[rehypeRaw]}
               components={{
                 img: ({ node, ...props }) => (
-                  <div className="img-resizer"><img {...props} /></div>
+                  <div className="img-resizer"><img alt="" {...props} /></div>
                 ),
                 // No onSourceEdit: the bulletin preview is read-only, so checkboxes
                 // and priority pills render disabled (search + sorting still work).

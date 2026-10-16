@@ -9,6 +9,7 @@ import RecentDrawer from '@/components/RecentDrawer';
 import { useAuth } from '@/context/AuthContext';
 import { useTabState } from '@/context/TabStateContext';
 import { api } from '@/utils/api';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 import { SATISFACTION_SCALE } from '@/constants/playthroughs';
 
 // ── Color by playthrough status ──────────────────────────────────────────────
@@ -689,13 +690,12 @@ function Top20List({ games, onOpenGame }) {
                   onMouseDown={() => addFromSearch(g.title)}
                 >
                   <HStack spacing={2}>
-                    {g.cover_url && (
-                      <img
-                        src={g.cover_url.replace('t_cover_big', 't_thumb')}
-                        alt=""
-                        style={{ width: '18px', height: '24px', objectFit: 'cover', borderRadius: '2px', flexShrink: 0 }}
-                      />
-                    )}
+                    <img
+                      src={coverSrc(g.cover_url?.replace('t_cover_big', 't_thumb'))}
+                      alt=""
+                      onError={fallbackToGenericCover}
+                      style={{ width: '18px', height: '24px', objectFit: 'cover', borderRadius: '2px', flexShrink: 0 }}
+                    />
                     <Text fontSize="xs" color="var(--color-text-primary)" noOfLines={1}>{g.title}</Text>
                   </HStack>
                 </Box>
@@ -1441,6 +1441,7 @@ function PersonalRatingPanel({ sessions, rangeStart, rangeEnd, onOpenGame, onRat
                                   src={thumb}
                                   alt=""
                                   draggable={false}
+                                  onError={fallbackToGenericCover}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
                                 />
                               ) : (

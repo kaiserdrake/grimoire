@@ -136,7 +136,7 @@ app.get('/api/igdb/credentials', isAuthenticated, async (req, res) => {
       // Never send the secret back in full — just signal whether it's set
       igdb_client_secret: row.igdb_client_secret ? '••••••••' : null,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -151,7 +151,7 @@ app.put('/api/igdb/credentials', isAuthenticated, async (req, res) => {
     // Invalidate cached token for this user since credentials changed
     igdbTokenCache.delete(req.user.id);
     res.json({ message: 'IGDB credentials updated.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -377,7 +377,7 @@ app.get('/api/users', isAuthenticated, isAdmin, async (req, res) => {
       ORDER BY u.created_at
     `);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -406,7 +406,7 @@ app.delete('/api/users/:id', isAuthenticated, isAdmin, async (req, res) => {
     const result = await query('DELETE FROM users WHERE id=$1 RETURNING id', [id]);
     if (result.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
     res.json({ message: 'User deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -429,7 +429,7 @@ app.patch('/api/users/:id/password', isAuthenticated, async (req, res) => {
     const hash = await bcrypt.hash(newPassword, 12);
     await query('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, id]);
     res.json({ message: 'Password updated.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -602,7 +602,7 @@ app.get('/api/games/:id', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -675,7 +675,7 @@ app.put('/api/games/:id', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -694,7 +694,7 @@ app.patch('/api/games/:id/tag', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -710,7 +710,7 @@ app.patch('/api/games/:id/remarks', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -722,7 +722,7 @@ app.delete('/api/games/:id', isAuthenticated, async (req, res) => {
     const result = await query('DELETE FROM games WHERE id=$1 AND user_id=$2 RETURNING id', [id, userId]);
     if (result.rows.length === 0) return res.status(404).json({ message: 'Game not found.' });
     res.json({ message: 'Game deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -745,7 +745,7 @@ app.get('/api/games/:id/playthroughs', isAuthenticated, async (req, res) => {
       [id, userId]
     );
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -802,7 +802,7 @@ app.patch('/api/playthroughs/:ptId', isAuthenticated, async (req, res) => {
     );
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [pt.game_id]);
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -818,7 +818,7 @@ app.delete('/api/playthroughs/:ptId', isAuthenticated, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ message: 'Playthrough not found.' });
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [result.rows[0].game_id]);
     res.json({ message: 'Playthrough deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -835,7 +835,7 @@ app.get('/api/playthroughs/:ptId/sessions', isAuthenticated, async (req, res) =>
       [ptId]
     );
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -864,7 +864,7 @@ app.post('/api/playthroughs/:ptId/sessions', isAuthenticated, async (req, res) =
     await query('UPDATE playthroughs SET status=$1, updated_at=NOW() WHERE id=$2', [sessionStatus, ptId]);
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [game_id]);
     res.status(201).json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -903,7 +903,7 @@ app.patch('/api/playthroughs/:ptId/sessions/:sessionId', isAuthenticated, async 
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [game_id]);
 
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -938,7 +938,7 @@ app.delete('/api/playthroughs/:ptId/sessions/:sessionId', isAuthenticated, async
     await query('UPDATE games SET updated_at=NOW() WHERE id=$1', [game_id]);
 
     res.json({ message: 'Session deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -959,7 +959,7 @@ app.get('/api/calendar/sessions', isAuthenticated, async (req, res) => {
       [userId]
     );
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -977,7 +977,7 @@ app.get('/api/playthroughs/:ptId/notes', isAuthenticated, async (req, res) => {
       [ptId, userId]
     );
     res.json(result.rows[0] || { content: '', updated_at: null });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1061,7 +1061,7 @@ app.get('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Note file not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1129,7 +1129,7 @@ app.get('/api/note-files/:fileId/raw', async (req, res) => {
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(content);
-  } catch (err) {
+  } catch {
     res.status(500).send('Server error.');
   }
 });
@@ -1253,7 +1253,7 @@ app.delete('/api/note-files/:fileId', isAuthenticated, async (req, res) => {
     }
 
     res.json({ message: 'Note file deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1279,7 +1279,7 @@ app.get('/api/games/:gameId/attachments', isAuthenticated, async (req, res) => {
 
     const result = await query(q, params);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1418,7 +1418,7 @@ app.delete('/api/attachments/:attachmentId', isAuthenticated, async (req, res) =
     });
 
     res.json({ message: 'Attachment deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1442,7 +1442,7 @@ app.get('/api/playthroughs/:ptId/maps', isAuthenticated, async (req, res) => {
       [ptId, userId]
     );
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1574,7 +1574,7 @@ app.get('/api/maps/:mapId', isAuthenticated, async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ message: 'Map not found.' });
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1606,7 +1606,7 @@ app.delete('/api/maps/:mapId', isAuthenticated, async (req, res) => {
     }
 
     res.json({ message: 'Map deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1620,7 +1620,7 @@ app.get('/api/maps/:mapId/pins', isAuthenticated, async (req, res) => {
     if (mapCheck.rows.length === 0) return res.status(404).json({ message: 'Map not found.' });
     const result = await query('SELECT * FROM map_pins WHERE map_id=$1 ORDER BY created_at', [mapId]);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1641,7 +1641,7 @@ app.post('/api/maps/:mapId/pins', isAuthenticated, async (req, res) => {
     );
     await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.status(201).json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1670,7 +1670,7 @@ app.put('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ message: 'Pin not found.' });
     await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1685,7 +1685,7 @@ app.delete('/api/maps/:mapId/pins/:pinId', isAuthenticated, async (req, res) => 
     if (result.rows.length === 0) return res.status(404).json({ message: 'Pin not found.' });
     await query('UPDATE game_maps SET updated_at=NOW() WHERE id=$1', [mapId]);
     res.json({ message: 'Pin deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1700,7 +1700,7 @@ app.get('/api/settings/:key', isAuthenticated, async (req, res) => {
       [userId, key]
     );
     res.json(result.rows[0]?.value ?? null);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1719,7 +1719,7 @@ app.put('/api/settings/:key', isAuthenticated, async (req, res) => {
       [userId, key, JSON.stringify(value)]
     );
     res.json(result.rows[0].value);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1802,7 +1802,7 @@ app.delete('/api/bulletin/:id', isAuthenticated, async (req, res) => {
     }
     await query('DELETE FROM bulletin_posts WHERE id=$1', [id]);
     res.json({ message: 'Post deleted.' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });
@@ -1822,7 +1822,7 @@ app.get('/api/bulletin/:id/content', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ message: 'Post not found.' });
 
     res.json(result.rows[0]);
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Server error.' });
   }
 });

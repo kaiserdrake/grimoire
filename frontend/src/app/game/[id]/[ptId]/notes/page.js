@@ -250,7 +250,7 @@ function ImageUploadModal({ isOpen, onClose, onInsert, gameId }) {
                 ) : existing && existing.length === 0 ? (
                   <Box py={6} textAlign="center">
                     <Text fontSize="sm" style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                      No images uploaded yet for this game's notes.
+                      No images uploaded yet for this game&apos;s notes.
                     </Text>
                     <Text fontSize="xs" mt={1} style={{ color: 'var(--color-text-muted)' }}>
                       Use the Upload or From URL tab to add one.
@@ -1122,29 +1122,33 @@ export default function NotesPage({ params }) {
   // Headings render with a hover "#" anchor that copies a deep-link to the section
   // (and scrolls to it). The id is assigned by rehypeHeadingIds. Works in locked /
   // present mode too, since the preview is the visible pane there.
-  const makeHeading = (Tag) => ({ node, children, ...props }) => {
-    const id = props.id;
-    const copyLink = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!id) return;
-      navigateSection(id); // scroll + reflect ?heading in the URL
-      const params = new URLSearchParams(window.location.search);
-      params.set('heading', id);
-      const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-      navigator.clipboard?.writeText(url)
-        .then(() => toast({ title: 'Section link copied', status: 'success', duration: 1500 }))
-        .catch(() => {});
+  const makeHeading = (Tag) => {
+    const Heading = ({ node, children, ...props }) => {
+      const id = props.id;
+      const copyLink = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!id) return;
+        navigateSection(id); // scroll + reflect ?heading in the URL
+        const params = new URLSearchParams(window.location.search);
+        params.set('heading', id);
+        const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        navigator.clipboard?.writeText(url)
+          .then(() => toast({ title: 'Section link copied', status: 'success', duration: 1500 }))
+          .catch(() => {});
+      };
+      return (
+        <Tag {...props} className="notes-heading-anchor">
+          {children}
+          <button type="button" className="notes-heading-link"
+            onClick={copyLink} aria-label="Copy link to this section" title="Copy link to this section">
+            #
+          </button>
+        </Tag>
+      );
     };
-    return (
-      <Tag {...props} className="notes-heading-anchor">
-        {children}
-        <button type="button" className="notes-heading-link"
-          onClick={copyLink} aria-label="Copy link to this section" title="Copy link to this section">
-          #
-        </button>
-      </Tag>
-    );
+    Heading.displayName = `Heading(${Tag})`;
+    return Heading;
   };
 
   const markdownComponents = useMemo(() => ({
@@ -1155,7 +1159,7 @@ export default function NotesPage({ params }) {
     h5: makeHeading('h5'),
     h6: makeHeading('h6'),
     img: ({ node, ...props }) => (
-      <div className="img-resizer"><img {...props} /></div>
+      <div className="img-resizer"><img alt="" {...props} /></div>
     ),
     table: ({ node, ...props }) => {
       // The frontmatter properties panel renders a plain table — keep it out of

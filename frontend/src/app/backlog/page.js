@@ -7,6 +7,7 @@ import {
 } from '@chakra-ui/react';
 import Navbar from '@/components/Navbar';
 import { api } from '@/utils/api';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const ClockIcon = () => (
@@ -134,20 +135,17 @@ const PriorityRow = ({ game, rank, isTop, isDragging, onDragStart, onDragEnter, 
       </Box>
 
       {/* Cover */}
-      {game.cover_url ? (
-        <Box
-          as="img"
-          src={game.cover_url}
-          alt={game.title}
-          w="36px"
-          h="48px"
-          borderRadius="4px"
-          objectFit="cover"
-          flexShrink={0}
-        />
-      ) : (
-        <Box w="36px" h="48px" borderRadius="4px" bg="var(--color-surface-hover)" flexShrink={0} />
-      )}
+      <Box
+        as="img"
+        src={coverSrc(game.cover_url)}
+        alt={game.title}
+        onError={fallbackToGenericCover}
+        w="36px"
+        h="48px"
+        borderRadius="4px"
+        objectFit="cover"
+        flexShrink={0}
+      />
 
       {/* Info */}
       <Box flex={1} minW={0}>

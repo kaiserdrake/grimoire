@@ -9,6 +9,7 @@ import {
 } from '@chakra-ui/react';
 import { SearchIcon } from '@chakra-ui/icons';
 import { api } from '@/utils/api';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 
 import { TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon } from '@/constants/tags';
 
@@ -277,17 +278,9 @@ function IGDBResultCard({ game, onAdd, adding }) {
       transition="all 0.15s"
     >
       <HStack spacing={3} align="start">
-        {game.cover_url ? (
-          <Image src={game.cover_url} alt={game.title}
-            w="52px" h="70px" objectFit="cover" borderRadius="sm" flexShrink={0}
-          />
-        ) : (
-          <Box w="52px" h="70px" bg="var(--color-bg-hover)" borderRadius="sm"
-            display="flex" alignItems="center" justifyContent="center" flexShrink={0}
-          >
-            <Text fontSize="xl">🎮</Text>
-          </Box>
-        )}
+        <Image src={coverSrc(game.cover_url)} alt={game.title} onError={fallbackToGenericCover}
+          w="52px" h="70px" objectFit="cover" borderRadius="sm" flexShrink={0}
+        />
 
         {/* Info — plain divs/spans, no <p> default margins */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '4px' }}>

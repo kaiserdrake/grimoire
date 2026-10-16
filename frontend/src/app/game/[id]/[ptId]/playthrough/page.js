@@ -18,6 +18,7 @@ import { api } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { PT_STATUS_LABELS, PT_STATUS_COLORS } from '@/constants/playthroughs';
 import { ptDisplayLabel } from '@/utils/playthroughs';
+import { coverSrc, fallbackToGenericCover } from '@/utils/cover';
 import { FavoriteIcon } from '@/constants/tags';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -459,13 +460,11 @@ function GameInfoCard({ game, onOpenModal, focusGame, isFocused, setFocus, clear
       <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
 
         {/* Cover */}
-        {game.cover_url && (
-          <Box flexShrink={0} borderRadius="md" overflow="hidden" w="105px" h="140px"
-            boxShadow="0 2px 8px rgba(0,0,0,0.25)">
-            <img src={game.cover_url} alt={game.title}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          </Box>
-        )}
+        <Box flexShrink={0} borderRadius="md" overflow="hidden" w="105px" h="140px"
+          boxShadow="0 2px 8px rgba(0,0,0,0.25)">
+          <img src={coverSrc(game.cover_url)} alt={game.title} onError={fallbackToGenericCover}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </Box>
 
         {/* Details */}
         <div style={{ flex: 1, minWidth: 0 }}>
