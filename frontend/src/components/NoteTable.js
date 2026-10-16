@@ -1,19 +1,23 @@
 'use client';
 
-import { useState, Children, cloneElement, isValidElement } from 'react';
-import { FiSearch, FiChevronUp, FiChevronDown, FiPlus } from 'react-icons/fi';
+import { useState, useEffect, Children, cloneElement, isValidElement } from 'react';
+import { createPortal } from 'react-dom';
+import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiX } from 'react-icons/fi';
 import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 
 // Custom react-markdown `table` renderer for note tables. Rows can be filtered by
 // the columns marked `:search`, every column header is click-to-sort (shift-click
 // to build a multi-column chain), and cells in `:check` / `:prio` columns render
-// interactive controls that write back to the markdown source.
+// interactive controls that write back to the markdown source. Images in `:img`
+// columns render as thumbnails that open full screen, plus a camera button.
 //
 // The remark plugin in utils/noteTables.js supplies the per-column config and the
 // per-cell sort keys / source offsets this component reads off its children.
 //
 // `onSourceEdit(start, end, text)` replaces that range of the markdown source.
 // Omitting it (the bulletin preview) renders the controls read-only.
+// `onCaptureImage()` resolves to the markdown of a freshly captured image; without
+// it `:img` cells only show their thumbnails.
 
 function matchesQuery(text, query) {
   const q = query.trim().toLowerCase();
@@ -74,15 +78,38 @@ function sortHint(kind, dir) {
   return dir === 'asc' ? 'ascending' : 'descending';
 }
 
+// Full-screen image viewer. Portaled to <body> so the preview's CSS `zoom` and
+// overflow don't clip it.
+function Lightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="md-lightbox" onClick={onClose} role="dialog" aria-label="Image viewer">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} />
+      <button type="button" className="md-lightbox-close" aria-label="Close" onClick={onClose}>
+        <FiX size={20} />
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
 export default function NoteTable({
   'data-col-kinds':    colKindsAttr   = '',
   'data-search-cols':  searchColsAttr = '',
   'data-sort-spec':    sortSpecAttr   = '',
   'data-row-template': rowTemplate    = '',
   'data-table-end':    tableEndAttr,
-  tableIndex, initialSearch, onSourceEdit, children, ...props
+  tableIndex, initialSearch, onSourceEdit, onCaptureImage, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
+  const [lightbox, setLightbox] = useState(null);           // { src, alt }
+  const [capturing, setCapturing] = useState(() => new Set()); // src-start of cells mid-capture
   // Clicking headers overrides the `:sortN` tokens, but editing those tokens in the
   // markdown re-seeds the chain — otherwise the author's change would do nothing
   // until the table remounted.
@@ -147,12 +174,53 @@ export default function NoteTable({
   );
 
   // ── Cells ───────────────────────────────────────────────────────────────────
+  const openImage = (e) => {
+    if (e.target.tagName !== 'IMG') return;
+    e.preventDefault();
+    e.stopPropagation(); // present mode treats a preview click as "exit"
+    setLightbox({ src: e.target.currentSrc || e.target.src, alt: e.target.alt });
+  };
+
+  const renderImageCell = (td, start, end) => {
+    const canCapture = !!onSourceEdit && !!onCaptureImage && start != null && end != null;
+    const busy = capturing.has(start);
+    const hasImg = td.props['data-has-img'] === '1';
+
+    const capture = async (e) => {
+      e.stopPropagation();
+      if (busy) return;
+      setCapturing(s => new Set(s).add(start));
+      try {
+        const md = await onCaptureImage();
+        if (md) onSourceEdit(start, end, start === end ? `${md} ` : md, td.props['data-src-text'] ?? '');
+      } finally {
+        setCapturing(s => { const n = new Set(s); n.delete(start); return n; });
+      }
+    };
+
+    return cloneElement(
+      td,
+      { key: td.key, className: cx(td.props.className, 'md-td-img'), onClick: openImage },
+      <>
+        {td.props.children}
+        {canCapture && (
+          <button type="button" className={cx('md-img-snap', hasImg && 'retake', busy && 'busy')}
+            onClick={capture} disabled={busy}
+            title={hasImg ? 'Retake snapshot from camera' : 'Snapshot from camera'}>
+            <FiCamera size={hasImg ? 11 : 14} />
+          </button>
+        )}
+      </>,
+    );
+  };
+
   const renderCell = (td) => {
     const kind = td.props['data-cell-kind'];
-    if (kind !== 'check' && kind !== 'prio') return td;
-
     const start = numAttr(td.props['data-src-start']);
     const end   = numAttr(td.props['data-src-end']);
+    if (kind === 'img') return renderImageCell(td, start, end);
+    if (kind !== 'check' && kind !== 'prio') return td;
+
     const editable = !!onSourceEdit && start != null && end != null;
     // An empty range means the cell has no token yet, so we insert one.
     const write = (text) => onSourceEdit(start, end, start === end ? `${text} ` : text);
@@ -236,7 +304,12 @@ export default function NoteTable({
     onSourceEdit(tableEnd, tableEnd, `\n${rowTemplate}`);
   };
 
-  const table = <table {...props}>{renderedHead}{renderedBody}</table>;
+  const table = (
+    <>
+      <table {...props}>{renderedHead}{renderedBody}</table>
+      {lightbox && <Lightbox {...lightbox} onClose={() => setLightbox(null)} />}
+    </>
+  );
 
   if (!searchCols.length && !canAddRow) return table;
 

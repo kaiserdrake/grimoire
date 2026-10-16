@@ -22,7 +22,7 @@ import NotesDrawer from '@/components/NotesDrawer';
 import RecentDrawer from '@/components/RecentDrawer';
 import SidebarSortControl, { useSidebarSort } from '@/components/SidebarSortControl';
 import GameTabBar from '@/components/GameTabBar';
-import CameraCapture from '@/components/CameraCapture';
+import CameraCapture, { captureCameraFrame } from '@/components/CameraCapture';
 import { useAuth } from '@/context/AuthContext';
 import { api, getApiBase } from '@/utils/api';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -464,6 +464,7 @@ function MarkdownHelpModal({ isOpen, onClose }) {
       ['| Name :search |','Filter box for this column'],
       ['| Done :check |','Cells hold [ ] / [x] as checkboxes'],
       ['| Priority :prio |','Cells hold Critical…Low with ▲▼ controls'],
+      ['| Snapshot :img |','Image thumbnails + one-click camera snapshot'],
       ['| Done :sort1 |','Sort by this column first'],
       ['| Priority :sort2desc |','…then by this one, descending'],
     ] },
@@ -939,11 +940,30 @@ export default function NotesPage({ params }) {
 
   // Replace a source range [start, end) — used by note-table checkbox toggles and
   // priority nudges, which carry the offsets of their token in the markdown.
-  const persistSourceRange = useCallback((start, end, text) => {
+  // `expected`, when given, is what the range must still hold — async writers (the
+  // table camera button) pass it so an edit made while they waited isn't clobbered.
+  const persistSourceRange = useCallback((start, end, text, expected) => {
     if (!Number.isInteger(start) || !Number.isInteger(end)) return;
     const cur = contentRef.current;
+    if (expected != null && cur.slice(start, end) !== expected) {
+      toast({ title: 'Note changed while capturing — snapshot not inserted', status: 'warning', duration: 3000 });
+      return;
+    }
     applySourceChange(cur.slice(0, start) + text + cur.slice(end));
-  }, [applySourceChange]);
+  }, [applySourceChange, toast]);
+
+  // One-click snapshot for `:img` table cells: grab a frame from the remembered
+  // camera, upload it to the game's notes attachments, hand back its markdown.
+  const captureTableImage = useCallback(async () => {
+    try {
+      const file = await captureCameraFrame();
+      const [attachment, base] = await Promise.all([api.attachments.upload(id, 'notes', file), getApiBase()]);
+      return `![snapshot](${base}${attachment.url})`;
+    } catch (err) {
+      toast({ title: 'Snapshot failed', description: err.message, status: 'error', duration: 4000 });
+      return null;
+    }
+  }, [id, toast]);
 
   // Scroll the preview to a heading id and reflect it in the URL so the address
   // bar can be copied as a deep-link to that section. Works in split, locked and
@@ -1148,7 +1168,7 @@ export default function NotesPage({ params }) {
       // `st` as a convenience alias for the first table.
       const fromUrl = searchParams.get(`st${idx}`) ?? (idx === 1 ? searchParams.get('st') : null);
       const init = props['data-search-cols'] ? (fromUrl ?? '') : '';
-      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} {...props} />;
+      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} onCaptureImage={captureTableImage} {...props} />;
     },
     pre: ({ node, children, ...props }) => {
       const codeEl = node?.children?.[0];
@@ -1168,7 +1188,7 @@ export default function NotesPage({ params }) {
       }
       return <pre {...props}>{children}</pre>;
     },
-  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, navigateSection]);
+  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, captureTableImage, navigateSection]);
 
   if (!user) return (
     <>

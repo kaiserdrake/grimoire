@@ -6,6 +6,8 @@
 //   :search        rows can be filtered by this column (was the only token before)
 //   :check         cells hold `[ ]` / `[x]` and render as toggleable checkboxes
 //   :prio          cells hold a priority level and render as a pill with ▲ / ▼
+//   :img           cells hold an image shown as a thumbnail (click to view full
+//                  screen) with a camera button that snaps one from the camera
 //   :sort[n][dir]  initial sort; `n` is the position in the multi-sort chain and
 //                  `dir` is asc (default) or desc — e.g. `:sort1` `:sort2desc`
 //
@@ -61,9 +63,12 @@ const PRIORITY_TOKEN_RE = new RegExp(
 
 const CHECK_TOKEN_RE = /\[([ xX])\]/;
 
+// The first markdown image in a cell — the one a camera snapshot replaces.
+const IMAGE_TOKEN_RE = /!\[[^\]]*\]\([^)]*\)/;
+
 // Header tokens. The trailing lookahead keeps `:searching` from matching `:search`.
 const HEADER_TOKEN_RE =
-  /:(search|checkbox|check|priority|prio|sort)(\d*)(?:[-_]?(asc|desc))?(?![a-z0-9])/gi;
+  /:(search|checkbox|check|priority|prio|image|img|sort)(\d*)(?:[-_]?(asc|desc))?(?![a-z0-9])/gi;
 
 // Tokens handled by sibling plugins — excluded from a cell's sort text so a cell
 // of icons doesn't sort by its raw `:icon[…]` markup.
@@ -114,6 +119,8 @@ function readHeaderConfig(cell) {
         case 'checkbox': cfg.kind = 'check'; break;
         case 'prio':
         case 'priority': cfg.kind = 'prio'; break;
+        case 'img':
+        case 'image':    cfg.kind = 'img'; break;
         case 'sort':
           cfg.sortRank = digits ? Number(digits) : 1;
           if (dir) cfg.sortDir = dir.toLowerCase();
@@ -165,6 +172,20 @@ function annotateCell(cell, kind, src) {
       props['data-src-end']   = String(m ? tokenStart + m[2].length : insertAt);
     }
     if (m) stripFirst(cell, PRIORITY_TOKEN_RE);
+  } else if (kind === 'img') {
+    // The image itself stays in the cell and renders through the normal `img`
+    // component; the range only tells the camera button what to replace.
+    const m = IMAGE_TOKEN_RE.exec(cellSrc);
+    props['data-cell-kind'] = 'img';
+    props['data-has-img']   = m ? '1' : '0';
+    if (start != null) {
+      const tokenStart = m ? start + m.index : insertAt;
+      props['data-src-start'] = String(tokenStart);
+      props['data-src-end']   = String(m ? tokenStart + m[0].length : insertAt);
+      // Lets the writer check the range still holds this text after the async
+      // capture + upload, in case the note was edited meanwhile.
+      props['data-src-text']  = m ? m[0] : '';
+    }
   }
 
   props['data-sort-text'] = cellText(cell);

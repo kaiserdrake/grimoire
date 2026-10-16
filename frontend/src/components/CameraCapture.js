@@ -15,6 +15,58 @@ const persistId = (id) => {
   try { id ? localStorage.setItem(STORAGE_KEY, id) : localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
 };
 
+// ── Quick capture ─────────────────────────────────────────────────────────────
+// Grab a single frame from the remembered camera without any UI: open the stream,
+// wait for a decoded frame, draw it, release the camera. Used by note tables'
+// one-click snapshot cells. Resolves to a JPEG File; rejects with a readable
+// message. Pick the camera once via the Insert image → Camera tab.
+export async function captureCameraFrame() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera is not available in this browser, or the page is not served over HTTPS.');
+  }
+  const savedId = readSavedId();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: savedId ? { deviceId: { exact: savedId } } : true,
+      audio: false,
+    });
+  } catch (err) {
+    if (savedId && (err?.name === 'OverconstrainedError' || err?.name === 'NotFoundError')) {
+      persistId(null);
+      return captureCameraFrame();
+    }
+    if (err?.name === 'NotAllowedError') throw new Error('Camera permission was denied.');
+    if (err?.name === 'NotReadableError') throw new Error('The camera is in use by another application.');
+    throw new Error('Unable to access the camera.');
+  }
+
+  try {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await video.play();
+    // Wait for a frame that has actually been painted — `play()` can resolve
+    // before the first one is decoded, which would capture a black image.
+    await new Promise((resolve) => {
+      if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(() => resolve());
+      else setTimeout(resolve, 150);
+    });
+    if (!video.videoWidth) throw new Error('The camera did not deliver a frame.');
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) throw new Error('Unable to encode the snapshot.');
+    return new File([blob], `snapshot-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  } finally {
+    stream.getTracks().forEach(t => t.stop());
+  }
+}
+
 // ── Camera Capture ────────────────────────────────────────────────────────────
 // Live webcam preview + snapshot. When `active` is true the camera stream is
 // started; toggling it off (or unmounting) releases the stream. A captured

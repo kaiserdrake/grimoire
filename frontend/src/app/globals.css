@@ -727,6 +727,50 @@ tr.notes-preview-line-active th:first-child {
 .md-prio-ctl button:hover:not(:disabled) { opacity: 1; }
 .md-prio-ctl button:disabled { opacity: 0.2; cursor: default; }
 
+/* ── Note tables: image cells (`:img`) ── */
+.notes-preview-content td.md-td-img { position: relative; text-align: center; }
+.md-td-img .img-resizer { resize: none !important; overflow: visible; }
+.md-td-img img {
+  display: block; margin: 0 auto;
+  max-height: 72px; max-width: 128px; width: auto; height: auto;
+  object-fit: cover; border-radius: var(--radius-sm);
+  cursor: zoom-in;
+}
+.md-img-snap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2em; height: 2em; padding: 0;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer; transition: color 0.12s, border-color 0.12s;
+}
+.md-img-snap:hover { color: var(--color-accent); border-color: var(--color-accent); }
+/* With an image already in the cell, the button shrinks to a corner "retake". */
+.md-img-snap.retake {
+  position: absolute; top: 3px; right: 3px;
+  width: 1.6em; height: 1.6em; border-style: solid;
+  opacity: 0; transition: opacity 0.12s;
+}
+.md-td-img:hover .md-img-snap.retake { opacity: 0.9; }
+.md-img-snap.busy { opacity: 1; cursor: progress; color: var(--color-accent); animation: md-snap-pulse 0.8s ease-in-out infinite; }
+@keyframes md-snap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.md-lightbox {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.88);
+  cursor: zoom-out;
+}
+.md-lightbox img { max-width: 96vw; max-height: 96vh; object-fit: contain; }
+.md-lightbox-close {
+  position: absolute; top: 12px; right: 12px;
+  display: flex; padding: 6px;
+  color: #fff; background: rgba(255, 255, 255, 0.12);
+  border: none; border-radius: 999px; cursor: pointer;
+}
+.md-lightbox-close:hover { background: rgba(255, 255, 255, 0.24); }
+
 /* Frontmatter "Properties" panel — collapsible metadata table (see utils/frontmatter.js) */
 .note-frontmatter {
   margin: 0 0 1em;
