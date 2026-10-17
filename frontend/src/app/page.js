@@ -21,15 +21,6 @@ import { TAG_STYLE, TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon, Dropped
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
-const AllGamesIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
-  </svg>
-);
-
 const SearchIconSvg = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8" />
@@ -78,53 +69,28 @@ const ALL_FILTERS = [
   { key: 'other',     label: 'Other',     Icon: OtherIcon     },
 ];
 
-// ── Filter button ─────────────────────────────────────────────────────────────
+// ── Toolbar icon button ───────────────────────────────────────────────────────
+// Shared look for every square icon button in the filter bar, so plain buttons
+// and menu triggers render identically (same size, border, active state).
+const toolbarBtnProps = (active) => ({
+  w: '34px', h: '34px', minW: '34px', p: 0, flexShrink: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  borderRadius: 'md', borderWidth: '1px', borderStyle: 'solid',
+  cursor: 'pointer', transition: 'all 0.15s',
+  bg:          active ? 'var(--color-accent-subtle)' : 'var(--color-bg-surface)',
+  borderColor: active ? 'var(--color-accent)'        : 'var(--color-border)',
+  color:       active ? 'var(--color-accent)'        : 'var(--color-text-muted)',
+  _hover: { borderColor: 'var(--color-accent)', color: active ? 'var(--color-accent)' : 'var(--color-text-primary)' },
+  _focus: { outline: 'none' },
+  _focusVisible: { boxShadow: '0 0 0 2px var(--color-accent)' },
+  sx: { WebkitTapHighlightColor: 'transparent' },
+});
 
-function FilterBtn({ active, onClick, title, tag, children }) {
-  const style = tag ? TAG_STYLE[tag] : TAG_STYLE.backlog;
+function ToolbarBtn({ active, onClick, title, children }) {
   return (
     <Tooltip label={title} hasArrow placement="bottom" openDelay={400}>
-      <Box
-        as="button"
-        onClick={onClick}
-        w="34px" h="34px"
-        borderRadius="md"
-        borderWidth="1px"
-        display="flex" alignItems="center" justifyContent="center"
-        transition="all 0.15s"
-        style={{
-          background:   active ? style.bg  : 'var(--color-bg-surface)',
-          borderColor:  active ? style.border : 'var(--color-border)',
-          color:        active ? style.color  : 'var(--color-text-muted)',
-          cursor: 'pointer',
-        }}
-      >
+      <Box as="button" type="button" aria-label={title} onClick={onClick} {...toolbarBtnProps(active)}>
         {children}
-      </Box>
-    </Tooltip>
-  );
-}
-
-// "All" button has its own neutral active style
-function AllFilterBtn({ active, onClick }) {
-  return (
-    <Tooltip label="All games" hasArrow placement="bottom" openDelay={400}>
-      <Box
-        as="button"
-        onClick={onClick}
-        w="34px" h="34px"
-        borderRadius="md"
-        borderWidth="1px"
-        display="flex" alignItems="center" justifyContent="center"
-        transition="all 0.15s"
-        style={{
-          background:  active ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
-          borderColor: active ? 'var(--color-border)'   : 'var(--color-border)',
-          color:       active ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-          cursor: 'pointer',
-        }}
-      >
-        <AllGamesIcon />
       </Box>
     </Tooltip>
   );
@@ -372,48 +338,17 @@ export default function HomePage() {
           <>
           {/* ── Filter bar ── */}
           <VStack spacing={2} mb={6} align="stretch">
-            <HStack spacing={2} align="center">
+            <HStack spacing={{ base: 1.5, sm: 2 }} align="center" minW={0}>
 
               {/* Group toggle */}
-              <Tooltip label={grouped ? 'Ungroup' : 'Group by category'} hasArrow placement="bottom" openDelay={400}>
-                <Box
-                  as="button"
-                  onClick={() => setGrouped(!grouped)}
-                  w="34px" h="34px"
-                  borderRadius="md"
-                  borderWidth="1px"
-                  display="flex" alignItems="center" justifyContent="center"
-                  transition="all 0.15s"
-                  style={{
-                    background:  grouped ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
-                    borderColor: grouped ? 'var(--color-border)'   : 'var(--color-border)',
-                    color:       grouped ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <GroupIcon />
-                </Box>
-              </Tooltip>
+              <ToolbarBtn active={grouped} onClick={() => setGrouped(!grouped)} title={grouped ? 'Ungroup' : 'Group by category'}>
+                <GroupIcon size={16} />
+              </ToolbarBtn>
               {/* Filter menu */}
               <Menu closeOnSelect={false}>
                 <Tooltip label="Filter" hasArrow placement="bottom" openDelay={400}>
-                <MenuButton
-                  as={Box}
-                  w="34px" h="34px"
-                  borderRadius="md"
-                  borderWidth="1px"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  cursor="pointer"
-                  transition="all 0.15s"
-                  style={{
-                    background:  activeFilters.length < ALL_FILTERS.length ? 'var(--color-bg-hover)' : 'var(--color-bg-surface)',
-                    borderColor: activeFilters.length < ALL_FILTERS.length ? 'var(--color-border)'   : 'var(--color-border)',
-                    color:       activeFilters.length < ALL_FILTERS.length ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                  }}
-                >
-                  <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
+                <MenuButton aria-label="Filter" {...toolbarBtnProps(activeFilters.length < ALL_FILTERS.length)}>
+                  <Box display="flex" alignItems="center" justifyContent="center">
                     <FilterIcon />
                   </Box>
                 </MenuButton>
@@ -472,37 +407,21 @@ export default function HomePage() {
               <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
 
               {/* Search toggle */}
-              <FilterBtn
+              <ToolbarBtn
                 active={showSearch || !!search}
                 onClick={() => { const next = !showSearch; setShowSearch(next); if (!next) setSearch(''); }}
                 title="Search"
-                tag="backlog"
               >
                 <SearchIconSvg />
-              </FilterBtn>
+              </ToolbarBtn>
               {/* Sort dropdown */}
               <Menu>
                 <Tooltip label={`Sort: ${currentSortLabel}`} hasArrow placement="bottom" openDelay={400}>
-                  <MenuButton
-                    as={Box}
-                    w="34px" h="34px"
-                    borderRadius="md"
-                    borderWidth="1px"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    cursor="pointer"
-                    transition="all 0.15s"
-                    style={{
-                      background: 'var(--color-bg-surface)',
-                      borderColor: 'var(--color-border)',
-                      color: 'var(--color-text-muted)',
-                    }}
-                  >
-                    <Box display="flex" alignItems="center" justifyContent="center" w="100%" h="100%">
-                    <SortIconSvg />
-                  </Box>
-                </MenuButton>
+                  <MenuButton aria-label="Sort" {...toolbarBtnProps(sortBy !== 'default')}>
+                    <Box display="flex" alignItems="center" justifyContent="center">
+                      <SortIconSvg />
+                    </Box>
+                  </MenuButton>
                 </Tooltip>
                 <MenuList fontSize="sm" minW="170px">
                   {SORT_OPTIONS.map((o) => (
@@ -522,55 +441,57 @@ export default function HomePage() {
               <Box w="1px" h="20px" bg="var(--color-border)" mx={0.5} flexShrink={0} />
 
               {/* View toggle */}
-              <Tooltip label={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'} hasArrow placement="bottom" openDelay={400}>
-                <Box
-                  as="button"
-                  onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
-                  w="34px" h="34px"
-                  borderRadius="md"
-                  borderWidth="1px"
-                  display="flex" alignItems="center" justifyContent="center"
-                  transition="all 0.15s"
-                  style={{
-                    background: 'var(--color-bg-surface)',
-                    borderColor: 'var(--color-border)',
-                    color: 'var(--color-text-muted)',
-                    cursor: 'pointer',
-                  }}
-                >
+              <ToolbarBtn
+                onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
+                title={viewMode === 'list' ? 'Switch to grid view' : 'Switch to list view'}
+              >
                 {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
-                </Box>
-              </Tooltip>
+              </ToolbarBtn>
 
               {/* Spacer */}
               <Box flex={1} />
 
-              {/* Examine Backlog */}
-              <Button
-                size="sm"
-                leftIcon={<BacklogIcon size={14} />}
-                variant="outline"
-                borderColor="var(--color-border)"
-                color="var(--color-text-muted)"
-                _hover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
-                onClick={onBacklogOpen}
-                flexShrink={0}
-              >
-                Backlog
-              </Button>
+              {/* Examine Backlog — icon-only on narrow screens */}
+              <Tooltip label="Examine backlog" hasArrow placement="bottom" openDelay={400}>
+                <Button
+                  size="sm"
+                  h="34px"
+                  minW="34px"
+                  px={{ base: 0, sm: 3 }}
+                  iconSpacing={{ base: 0, sm: 2 }}
+                  leftIcon={<BacklogIcon size={16} />}
+                  variant="outline"
+                  borderColor="var(--color-border)"
+                  bg="var(--color-bg-surface)"
+                  color="var(--color-text-muted)"
+                  _hover={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+                  onClick={onBacklogOpen}
+                  aria-label="Examine backlog"
+                  flexShrink={0}
+                >
+                  <Box as="span" display={{ base: 'none', sm: 'inline' }}>Backlog</Box>
+                </Button>
+              </Tooltip>
 
-              {/* Add Game — right-aligned */}
-              <Button
-                size="sm"
-                leftIcon={<AddIcon />}
-                bg="var(--color-accent)"
-                color="white"
-                _hover={{ bg: 'var(--color-accent-hover)' }}
-                onClick={onAddOpen}
-                flexShrink={0}
-              >
-                Add Game
-              </Button>
+              {/* Add Game — right-aligned, icon-only on narrow screens */}
+              <Tooltip label="Add game" hasArrow placement="bottom" openDelay={400}>
+                <Button
+                  size="sm"
+                  h="34px"
+                  minW="34px"
+                  px={{ base: 0, sm: 3 }}
+                  iconSpacing={{ base: 0, sm: 2 }}
+                  leftIcon={<AddIcon boxSize="12px" />}
+                  bg="var(--color-accent)"
+                  color="white"
+                  _hover={{ bg: 'var(--color-accent-hover)' }}
+                  onClick={onAddOpen}
+                  aria-label="Add game"
+                  flexShrink={0}
+                >
+                  <Box as="span" display={{ base: 'none', sm: 'inline' }}>Add Game</Box>
+                </Button>
+              </Tooltip>
               </HStack>
 
               {/* Collapsible search */}

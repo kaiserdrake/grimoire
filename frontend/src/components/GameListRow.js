@@ -27,6 +27,8 @@ function PlaythroughRow({ pt, allPlaythroughs }) {
   );
 }
 
+const oneLine = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+
 export default function GameListRow({ game, onClick }) {
   const releaseYear = (() => {
     const d = game.releases?.[0]?.date;
@@ -34,14 +36,13 @@ export default function GameListRow({ game, onClick }) {
   })();
 
   const genre     = game.genres?.[0] ?? null;
-  const developer = game.developer ?? null;
-  const publisher = game.publisher ?? null;
+  const company   = game.publisher ?? game.developer ?? null;
   const ttb       = game.time_to_beat != null ? `${game.time_to_beat}h` : null;
   const tagStyle  = game.tag ? TAG_STYLE[game.tag] : null;
   const playthroughs = [...(game.playthroughs ?? [])];
 
-  const metaLine  = [releaseYear, genre, ttb ? `⏱ ${ttb}` : null].filter(Boolean).join(' · ');
-  const devLine   = [developer, publisher].filter(Boolean).join(' | ');
+  const yearLine  = [releaseYear, ttb ? `⏱ ${ttb}` : null].filter(Boolean).join(' · ');
+  const infoLine  = [company, genre].filter(Boolean).join(' | ');
 
   return (
     <Box
@@ -63,49 +64,48 @@ export default function GameListRow({ game, onClick }) {
       </div>
 
       {/* Content */}
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '3px' }}>
 
         {/* Title */}
         <span style={{
           fontWeight: 700, fontSize: '0.875rem', lineHeight: '1.3',
-          color: 'var(--color-text-primary)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          color: 'var(--color-text-primary)', ...oneLine,
         }}>
           {game.title}
         </span>
 
-        {/* Two columns below title */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-
-
-          {/* Left: tag + meta */}
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: '3px' }}>
+        {/* Year + tag (left) | playthroughs (right) */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+            {yearLine && <span style={{ ...s.muted, ...oneLine }}>{yearLine}</span>}
             {tagStyle && game.tag && (
-              <div>
-                <span style={{
-                  fontSize: '0.6rem', fontWeight: 700, lineHeight: '1',
-                  padding: '2px 6px', borderRadius: '4px',
-                  textTransform: 'uppercase', letterSpacing: '0.04em',
-                  color: tagStyle.color, background: tagStyle.background,
-                }}>
-                  {game.tag}
-                </span>
-              </div>
+              <span style={{
+                fontSize: '0.6rem', fontWeight: 700, lineHeight: '1',
+                padding: '2px 6px', borderRadius: '4px', flexShrink: 0,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+                color: tagStyle.color, background: tagStyle.background,
+              }}>
+                {game.tag}
+              </span>
             )}
-            {metaLine && <span style={s.muted}>{metaLine}</span>}
-            {devLine  && <span style={s.muted}>{devLine}</span>}
           </div>
 
-          {/* Right: playthroughs */}
           {playthroughs.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, gap: '3px' }}>
-              {playthroughs.map((pt, i) => (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: '3px' }}>
+              {playthroughs.map((pt) => (
                 <PlaythroughRow key={pt.id} pt={pt} allPlaythroughs={playthroughs} />
               ))}
             </div>
           )}
-
         </div>
+
+        {/* Publisher | Genre */}
+        {infoLine && <span style={{ ...s.muted, ...oneLine }}>{infoLine}</span>}
+
+        {/* Brief description */}
+        {game.summary && (
+          <span className="game-list-row-summary">{game.summary}</span>
+        )}
       </div>
     </Box>
   );
