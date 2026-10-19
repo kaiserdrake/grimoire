@@ -124,6 +124,44 @@ function latestPtTime(game) {
   return Math.max(...pts.map((p) => new Date(p.updated_at).getTime()));
 }
 
+// Latest session (by start date) of a playthrough, or null if it has none.
+function latestSession(pt) {
+  const ss = pt.sessions ?? [];
+  if (ss.length === 0) return null;
+  return ss.reduce((a, b) => ((b.start_date || '') >= (a.start_date || '') ? b : a));
+}
+
+// Most recent date (YYYY-MM-DD) across a game's playthroughs with the given
+// status, read from each one's latest session via pick(session). '' if none.
+function latestPtDate(game, status, pick) {
+  let best = '';
+  for (const pt of game.playthroughs ?? []) {
+    if (pt.status !== status) continue;
+    const s = latestSession(pt);
+    const d = s ? (pick(s) || '').slice(0, 10) : '';
+    if (d > best) best = d;
+  }
+  return best;
+}
+
+// Default sort tiers: playing → pended → backlog → completed → everything else.
+function defaultTier(game) {
+  const statuses = new Set((game.playthroughs ?? []).map((p) => p.status));
+  if (statuses.has('playing'))   return 0;
+  if (statuses.has('pend'))      return 1;
+  if (game.tag === 'backlog')    return 2;
+  if (statuses.has('completed')) return 3;
+  return 4;
+}
+
+// Recency key within a default-sort tier ('' when the tier has none).
+function defaultTierDate(game, tier) {
+  if (tier === 0) return latestPtDate(game, 'playing',   (s) => s.start_date);
+  if (tier === 1) return latestPtDate(game, 'pend',      (s) => s.start_date);
+  if (tier === 3) return latestPtDate(game, 'completed', (s) => s.end_date || s.start_date);
+  return '';
+}
+
 function releaseDate(game) {
   return game.releases?.[0]?.date || '';
 }
@@ -142,7 +180,7 @@ export default function HomePage() {
 
   const { listState, setListState } = useTabState();
 
-  const activeFilters = listState.activeFilters ?? ['playing', 'backlog', 'wishlist', 'favorite', 'completed', 'pend', 'other'];
+  const activeFilters = listState.activeFilters ?? ['playing', 'wishlist', 'favorite', 'completed', 'pend', 'other'];
   const grouped      = listState.grouped ?? false;
   const search       = listState.search;
   const showSearch   = listState.showSearch;
@@ -216,17 +254,15 @@ export default function HomePage() {
   })
   .sort((a, b) => {
     if (sortBy === 'default') {
-      // Tier 1: has a "playing" playthrough
-      const aPlaying = (a.playthroughs ?? []).some((p) => p.status === 'playing') ? 0 : 1;
-      const bPlaying = (b.playthroughs ?? []).some((p) => p.status === 'playing') ? 0 : 1;
-      if (aPlaying !== bPlaying) return aPlaying - bPlaying;
+      const aTier = defaultTier(a);
+      const bTier = defaultTier(b);
+      if (aTier !== bTier) return aTier - bTier;
 
-      // Tier 2: has "backlog" tag
-      const aBacklog = a.tag === 'backlog' ? 0 : 1;
-      const bBacklog = b.tag === 'backlog' ? 0 : 1;
-      if (aBacklog !== bBacklog) return aBacklog - bBacklog;
+      // Within playing / pended / completed: most recent session first
+      const dateDiff = defaultTierDate(b, bTier).localeCompare(defaultTierDate(a, aTier));
+      if (dateDiff !== 0) return dateDiff;
 
-      // Tier 3: release date descending (newest first)
+      // Fallback: release date descending (newest first)
       return releaseDate(b).localeCompare(releaseDate(a));
     }
     if (sortBy === 'playing_first') {
