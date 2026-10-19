@@ -10,6 +10,8 @@ import { DeleteIcon, AddIcon, ChevronRightIcon, ChevronDownIcon } from '@chakra-
 import { FiFileText, FiMap, FiTrash2, FiEdit2, FiRefreshCw, FiPaperclip, FiTarget } from 'react-icons/fi';
 
 import { useRouter } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api, getApiBase } from '@/utils/api';
 import { useFocus } from '@/context/FocusContext';
 
@@ -874,6 +876,109 @@ function AddPlaythroughForm({ gameId, platforms, onAdded, onCancel }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
+// ── Remark field ─────────────────────────────────────────────────────────────
+// Markdown-rendered text with an edit icon on hover; click the icon to edit inline.
+// `template` prefills the editor when the field is empty; saving it untouched keeps the field empty.
+const WISHLIST_REMARKS_TEMPLATE = '- Platform: \n- JP version supports EN: ';
+
+const remarkTextareaStyle = {
+  width: '100%', resize: 'vertical', padding: '8px 10px',
+  fontSize: '0.8rem', lineHeight: 1.6,
+  background: 'var(--color-bg-page)',
+  border: '1px solid var(--color-border)',
+  borderRadius: '6px',
+  color: 'var(--color-text-primary)',
+  outline: 'none',
+};
+
+const remarkMarkdownComponents = {
+  a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />,
+};
+
+function RemarkField({ label, value, placeholder, emptyText, template, onSave, mt }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft]     = useState(value);
+  const [saving, setSaving]   = useState(false);
+
+  const startEdit = () => { setDraft(value || template || ''); setEditing(true); };
+  const cancel    = () => { setDraft(value); setEditing(false); };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const unchangedTemplate = template && draft.trim() === template.trim();
+      if (await onSave(unchangedTemplate ? '' : draft)) setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); cancel(); }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) save();
+  };
+
+  return (
+    <Box mt={mt} role="group">
+      <HStack spacing={1} mb={2}>
+        <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)">
+          {label}
+        </Text>
+        {!editing && (
+          <Tooltip label={`Edit ${label.toLowerCase()}`} hasArrow placement="top" openDelay={400}>
+            <IconButton size="xs" variant="ghost" aria-label={`Edit ${label.toLowerCase()}`}
+              icon={<FiEdit2 size={11} />}
+              color="var(--color-text-muted)" _hover={{ color: 'var(--color-text-primary)' }}
+              minWidth="18px" height="18px"
+              opacity={0} _groupHover={{ opacity: 1 }} _focusVisible={{ opacity: 1 }}
+              sx={{ '@media (hover: none)': { opacity: 1 } }}
+              onClick={startEdit}
+            />
+          </Tooltip>
+        )}
+      </HStack>
+      {editing ? (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            rows={3}
+            autoFocus
+            onFocus={(e) => {
+              // With a fresh template, put the caret after the first label
+              if (template && draft === template) {
+                const pos = template.indexOf('\n');
+                e.target.setSelectionRange(pos, pos);
+              }
+            }}
+            style={remarkTextareaStyle}
+          />
+          <HStack justify="flex-end" mt={2} spacing={1}>
+            <Button size="xs" variant="ghost" bg="transparent" border="none" boxShadow="none"
+              _hover={{ bg: 'transparent', opacity: 0.75 }} onClick={cancel}>
+              Cancel
+            </Button>
+            <Button size="xs" bg="var(--color-accent)" color="white" _hover={{ opacity: 0.85 }}
+              isLoading={saving} onClick={save}>
+              Save
+            </Button>
+          </HStack>
+        </>
+      ) : value ? (
+        <Box className="notes-preview-content remark-md" fontSize="0.8rem" lineHeight={1.6} color="var(--color-text-primary)" wordBreak="break-word">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={remarkMarkdownComponents}>{value}</ReactMarkdown>
+        </Box>
+      ) : (
+        <Text fontSize="0.8rem" color="var(--color-text-muted)" fontStyle="italic">
+          {emptyText}
+        </Text>
+      )}
+    </Box>
+  );
+}
+
 export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDeleted }) {
   const toast  = useToast();
   const router = useRouter();
@@ -902,7 +1007,6 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
   const [localAggregatedRating, setLocalAggregatedRating] = useState(game?.aggregated_rating  ?? null);
   const [remarksDraft,          setRemarksDraft]          = useState(game?.remarks             || '');
   const [wishlistRemarksDraft,  setWishlistRemarksDraft]  = useState(game?.wishlist_remarks    || '');
-  const [savingRemarks,         setSavingRemarks]         = useState(false);
 
   useEffect(() => {
     if (game) {
@@ -1020,19 +1124,22 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
     }
   };
 
-  const handleRemarksSave = async () => {
-    setSavingRemarks(true);
+  // Both fields share one endpoint; send the edited one plus the other's saved value
+  const handleRemarksSave = async (changes) => {
+    const next = { remarks: remarksDraft, wishlist_remarks: wishlistRemarksDraft, ...changes };
     try {
       await api.games.updateRemarks(game.id, {
-        remarks:          remarksDraft          || null,
-        wishlist_remarks: wishlistRemarksDraft  || null,
+        remarks:          next.remarks          || null,
+        wishlist_remarks: next.wishlist_remarks || null,
       });
+      setRemarksDraft(next.remarks);
+      setWishlistRemarksDraft(next.wishlist_remarks);
       toast({ title: 'Remarks saved', status: 'success', duration: 2000 });
       onUpdated?.();
+      return true;
     } catch (err) {
       toast({ title: 'Failed to save remarks', description: err.message, status: 'error', duration: 3000 });
-    } finally {
-      setSavingRemarks(false);
+      return false;
     }
   };
 
@@ -1306,57 +1413,24 @@ export default function GameDetailModal({ game, isOpen, onClose, onUpdated, onDe
             {/* ── Remarks ───────────────────────────────────────────────── */}
             <Divider borderColor="var(--color-border-subtle)" />
             <Box>
-              <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mb={2}>
-                Remarks
-              </Text>
-              <textarea
+              <RemarkField
+                label="Remarks"
                 value={remarksDraft}
-                onChange={(e) => setRemarksDraft(e.target.value)}
                 placeholder="Add your notes or thoughts about this game…"
-                rows={3}
-                style={{
-                  width: '100%', resize: 'vertical', padding: '8px 10px',
-                  fontSize: '0.8rem', lineHeight: 1.6,
-                  background: 'var(--color-bg-page)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: '6px',
-                  color: 'var(--color-text-primary)',
-                  outline: 'none',
-                }}
+                emptyText="No remarks yet."
+                onSave={(v) => handleRemarksSave({ remarks: v })}
               />
               {listStatus === 'wishlist' && (
-                <>
-                  <Text fontSize="sm" fontWeight="600" color="var(--color-text-secondary)" mt={3} mb={2}>
-                    Wishlist Remarks
-                  </Text>
-                  <textarea
-                    value={wishlistRemarksDraft}
-                    onChange={(e) => setWishlistRemarksDraft(e.target.value)}
-                    placeholder="On which platform you want to play this game? Does the JP version supports English?"
-                    rows={3}
-                    style={{
-                      width: '100%', resize: 'vertical', padding: '8px 10px',
-                      fontSize: '0.8rem', lineHeight: 1.6,
-                      background: 'var(--color-bg-page)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '6px',
-                      color: 'var(--color-text-primary)',
-                      outline: 'none',
-                    }}
-                  />
-                </>
+                <RemarkField
+                  mt={3}
+                  label="Wishlist Remarks"
+                  value={wishlistRemarksDraft}
+                  placeholder="On which platform you want to play this game? Does the JP version supports English?"
+                  template={WISHLIST_REMARKS_TEMPLATE}
+                  emptyText="No wishlist remarks yet."
+                  onSave={(v) => handleRemarksSave({ wishlist_remarks: v })}
+                />
               )}
-              <HStack justify="flex-end" mt={2}>
-                <Button
-                  size="xs"
-                  bg="var(--color-accent)" color="white"
-                  _hover={{ opacity: 0.85 }}
-                  isLoading={savingRemarks}
-                  onClick={handleRemarksSave}
-                >
-                  Save
-                </Button>
-              </HStack>
             </Box>
 
             {/* ── Attachments ───────────────────────────────────────────── */}

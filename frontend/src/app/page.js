@@ -144,14 +144,14 @@ function latestPtDate(game, status, pick) {
   return best;
 }
 
-// Default sort tiers: playing → wishlist → pended → backlog → completed → everything else.
+// Default sort tiers: playing → wishlist → pended → backlog → completed (incl. favorites) → everything else.
 function defaultTier(game) {
   const statuses = new Set((game.playthroughs ?? []).map((p) => p.status));
   if (statuses.has('playing'))   return 0;
   if (game.tag === 'wishlist')   return 1;
   if (statuses.has('pend'))      return 2;
   if (game.tag === 'backlog')    return 3;
-  if (statuses.has('completed')) return 4;
+  if (statuses.has('completed') || game.tag === 'favorite') return 4;
   return 5;
 }
 
@@ -176,6 +176,8 @@ export default function HomePage() {
   const [games, setGames]               = useState([]);
   const [fetching, setFetching]         = useState(false);
   const [selectedGame, setSelectedGame] = useState(null);
+  // Set when the detail modal was opened from Examine Backlog, so closing it returns there
+  const [returnToBacklog, setReturnToBacklog] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const searchRef = useRef(null);
 
@@ -229,6 +231,14 @@ export default function HomePage() {
   }, [user]);
 
   useEffect(() => { fetchGames(); }, [fetchGames]);
+
+  const closeDetail = () => {
+    setSelectedGame(null);
+    if (returnToBacklog) {
+      setReturnToBacklog(false);
+      onBacklogOpen(); // backlog reloads on open, so detail edits are reflected
+    }
+  };
 
   useEffect(() => {
     if (showSearch) searchRef.current?.focus();
@@ -291,13 +301,16 @@ export default function HomePage() {
   });
 
   // ── Group filtered games by category ─────────────────────────────────────────
+  // Same tiers as the Default sort; favorites count as completed.
+  const ptStatuses = (g) => new Set((g.playthroughs ?? []).map((p) => p.status));
   const GROUP_ORDER = [
-    { key: 'playing',  label: 'PLAYING',  test: (g) => (g.playthroughs ?? []).some((p) => p.status === 'playing') },
-    { key: 'backlog',  label: 'BACKLOG',  test: (g) => g.tag === 'backlog'  && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
-    { key: 'wishlist', label: 'WISHLIST', test: (g) => g.tag === 'wishlist' && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
-    { key: 'favorite', label: 'FAVORITES', test: (g) => g.tag === 'favorite' && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
-    { key: 'dropped',  label: 'DROPPED',  test: (g) => g.tag === 'dropped'  && !(g.playthroughs ?? []).some((p) => p.status === 'playing') },
-    { key: 'other',    label: 'OTHER',    test: () => true },
+    { key: 'playing',   label: 'PLAYING',   test: (g) => ptStatuses(g).has('playing') },
+    { key: 'wishlist',  label: 'WISHLIST',  test: (g) => g.tag === 'wishlist' },
+    { key: 'pend',      label: 'PENDED',    test: (g) => ptStatuses(g).has('pend') },
+    { key: 'backlog',   label: 'BACKLOG',   test: (g) => g.tag === 'backlog' },
+    { key: 'completed', label: 'COMPLETED', test: (g) => ptStatuses(g).has('completed') || g.tag === 'favorite' },
+    { key: 'dropped',   label: 'DROPPED',   test: (g) => g.tag === 'dropped' || ptStatuses(g).has('dropped') },
+    { key: 'other',     label: 'OTHER',     test: () => true },
   ];
 
   const groupedGames = grouped
@@ -618,14 +631,22 @@ export default function HomePage() {
         onClose={onAddClose}
         onAdded={async (game) => { await fetchGames(); setSelectedGame(game); }}
       />
-      <ExamineBacklogModal isOpen={isBacklogOpen} onClose={onBacklogClose} />
+      <ExamineBacklogModal
+        isOpen={isBacklogOpen}
+        onClose={onBacklogClose}
+        onOpenGame={(game) => {
+          onBacklogClose();
+          setReturnToBacklog(true);
+          setSelectedGame(games.find((g) => g.id === game.id) ?? game);
+        }}
+      />
       {selectedGame && (
         <GameDetailModal
           game={selectedGame}
           isOpen={!!selectedGame}
-          onClose={() => setSelectedGame(null)}
+          onClose={closeDetail}
           onUpdated={fetchGames}
-          onDeleted={() => { fetchGames(); setSelectedGame(null); }}
+          onDeleted={() => { fetchGames(); closeDetail(); }}
         />
       )}
     </>

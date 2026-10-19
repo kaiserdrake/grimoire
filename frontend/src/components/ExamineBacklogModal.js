@@ -77,7 +77,7 @@ const StatCard = ({ label, value, sub, accent }) => (
 // Fixed height, cover-as-background (matching RecentDrawer style)
 const ROW_HEIGHT = '68px';
 
-const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, onTimeUpdated }) => {
+const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, onTimeUpdated, onOpen }) => {
   const [editing, setEditing]   = useState(false);
   const [inputVal, setInputVal] = useState('');
   const [saving, setSaving]     = useState(false);
@@ -134,6 +134,7 @@ const PriorityRow = ({ game, rank, isTop, onDragStart, onDragEnter, onDragEnd, o
       onDragStart={editing ? undefined : onDragStart}
       onDragEnter={editing ? undefined : onDragEnter}
       onDragEnd={editing ? undefined : onDragEnd}
+      onClick={editing ? undefined : () => onOpen(game)}
       // cover-as-background
       backgroundImage={hasCover ? `url(${game.cover_url})` : 'none'}
       backgroundSize="cover"
@@ -305,7 +306,7 @@ const ActiveGameCard = ({ game }) => {
 };
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-export default function ExamineBacklogModal({ isOpen, onClose }) {
+export default function ExamineBacklogModal({ isOpen, onClose, onOpenGame }) {
   const [games, setGames]             = useState([]);
   const [activeGames, setActiveGames] = useState([]);
   const [ordered, setOrdered]         = useState([]);
@@ -603,7 +604,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                     Priority Order
                   </Text>
                   <Text fontSize="10px" color="var(--color-text-muted)">
-                    Drag rows to reorder — priority saves automatically.
+                    Drag rows to reorder — priority saves automatically. Click a row to open its details.
                   </Text>
                 </Box>
                 {ordered.map((game, idx) => (
@@ -616,6 +617,7 @@ export default function ExamineBacklogModal({ isOpen, onClose }) {
                     onDragEnter={() => handleDragEnter(idx)}
                     onDragEnd={handleDragEnd}
                     onTimeUpdated={handleTimeUpdated}
+                    onOpen={onOpenGame}
                   />
                 ))}
               </VStack>
