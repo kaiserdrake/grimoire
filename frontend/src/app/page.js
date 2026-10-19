@@ -144,21 +144,22 @@ function latestPtDate(game, status, pick) {
   return best;
 }
 
-// Default sort tiers: playing → pended → backlog → completed → everything else.
+// Default sort tiers: playing → wishlist → pended → backlog → completed → everything else.
 function defaultTier(game) {
   const statuses = new Set((game.playthroughs ?? []).map((p) => p.status));
   if (statuses.has('playing'))   return 0;
-  if (statuses.has('pend'))      return 1;
-  if (game.tag === 'backlog')    return 2;
-  if (statuses.has('completed')) return 3;
-  return 4;
+  if (game.tag === 'wishlist')   return 1;
+  if (statuses.has('pend'))      return 2;
+  if (game.tag === 'backlog')    return 3;
+  if (statuses.has('completed')) return 4;
+  return 5;
 }
 
 // Recency key within a default-sort tier ('' when the tier has none).
 function defaultTierDate(game, tier) {
   if (tier === 0) return latestPtDate(game, 'playing',   (s) => s.start_date);
-  if (tier === 1) return latestPtDate(game, 'pend',      (s) => s.start_date);
-  if (tier === 3) return latestPtDate(game, 'completed', (s) => s.end_date || s.start_date);
+  if (tier === 2) return latestPtDate(game, 'pend',      (s) => s.start_date);
+  if (tier === 4) return latestPtDate(game, 'completed', (s) => s.end_date || s.start_date);
   return '';
 }
 
