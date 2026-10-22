@@ -1136,8 +1136,9 @@ export default function NotesPage({ params }) {
     }
   };
 
+  // Resolves true once the text is stored (callers that must wait for that check it).
   const save = useCallback(async (text) => {
-    if (!activeFileId) return;
+    if (!activeFileId) return false;
     setSaving(true);
     try {
       const updated = await api.noteFiles.save(activeFileId, { content: text });
@@ -1150,8 +1151,9 @@ export default function NotesPage({ params }) {
         }
         return next;
       });
+      return true;
     }
-    catch (err) { toast({ title: 'Auto-save failed', description: err.message, status: 'error', duration: 3000 }); }
+    catch (err) { toast({ title: 'Auto-save failed', description: err.message, status: 'error', duration: 3000 }); return false; }
     finally { setSaving(false); }
   }, [activeFileId]);
 
@@ -1349,6 +1351,36 @@ export default function NotesPage({ params }) {
     blockHoldRef.current = open;
     if (!open) blockTaRef.current?.focus();
   }, []);
+
+  // Clearing a `:img` table cell: take the image out of the note, save at once (the
+  // server won't delete a file a saved note still references), then delete the
+  // attachment so its file stops using disk space. A 409 means another note in this
+  // game still shows the same image, so the file is kept — nothing to report.
+  const clearTableImage = useCallback(async (start, end, expected) => {
+    const cur = contentRef.current;
+    if (cur.slice(start, end) !== expected) {
+      toast({ title: 'Note changed meanwhile — image not removed', status: 'warning', duration: 3000 });
+      return;
+    }
+    const next = cur.slice(0, start) + cur.slice(end);
+    applySourceChange(next);
+    clearTimeout(saveTimer.current); // save now rather than after the debounce
+    if (!(await save(next))) return;
+
+    const src = /\]\(([^)\s]+)/.exec(expected)?.[1] ?? '';
+    const at = src.indexOf('/uploads/games/');
+    if (at === -1) return; // an external image — no file of ours to delete
+    const url = src.slice(at);
+    try {
+      const attachments = await api.attachments.list(id, 'notes');
+      const att = attachments.find(a => a.url === url);
+      if (att) await api.attachments.delete(att.id);
+    } catch (err) {
+      if (err.status !== 409) {
+        toast({ title: 'Image removed from the note, but its file could not be deleted', description: err.message, status: 'warning', duration: 4000 });
+      }
+    }
+  }, [id, save, applySourceChange, toast]);
 
   // One-click snapshot for `:img` table cells: grab a frame from the remembered
   // camera, upload it to the game's notes attachments, hand back its markdown.
@@ -1574,7 +1606,7 @@ export default function NotesPage({ params }) {
       // `st` as a convenience alias for the first table.
       const fromUrl = searchParams.get(`st${idx}`) ?? (idx === 1 ? searchParams.get('st') : null);
       const init = props['data-search-cols'] ? (fromUrl ?? '') : '';
-      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} onCaptureImage={captureTableImage} locked={isPresentMode} {...props} />;
+      return <NoteTable tableIndex={idx} initialSearch={init} onSourceEdit={persistSourceRange} onCaptureImage={captureTableImage} onClearImage={clearTableImage} locked={isPresentMode} {...props} />;
     },
     pre: ({ node, children, ...props }) => {
       const codeEl = node?.children?.[0];
@@ -1602,7 +1634,7 @@ export default function NotesPage({ params }) {
       return <BlockEditor initial={target.original} onCommit={(text) => commitBlock(target, text)} onCancel={() => setEditBlock(null)}
         taRef={blockTaRef} holdRef={blockHoldRef} onReady={handleBlockReady} />;
     },
-  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, captureTableImage, navigateSection, isPresentMode, commitBlock, handleBlockReady]);
+  }), [iconMap, searchParams, persistTierBlock, persistSourceRange, captureTableImage, clearTableImage, navigateSection, isPresentMode, commitBlock, handleBlockReady]);
 
   if (!user) return (
     <>

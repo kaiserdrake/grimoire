@@ -6,7 +6,7 @@ import {
   Input, Select, Tooltip, useToast,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
 } from '@chakra-ui/react';
-import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiCheck, FiCamera } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiSettings, FiMap, FiTag, FiLink, FiCheck, FiCamera, FiHardDrive, FiSearch } from 'react-icons/fi';
 import Navbar from '@/components/Navbar';
 import GameTabBar from '@/components/GameTabBar';
 import GameDetailModal from '@/components/GameDetailModal';
@@ -60,6 +60,103 @@ function ColorPicker({ value, onChange }) {
         />
       ))}
     </HStack>
+  );
+}
+
+// ── Unused images cleanup ──────────────────────────────────────────────────────
+const formatBytes = (bytes) => {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  return `${(n / 1024 ** 3).toFixed(2)} GB`;
+};
+
+const SET_LABELS = { notes: 'Notes', maps: 'Maps' };
+
+// Lists this game's notes/maps images that nothing shows any more and deletes them.
+// The server re-checks each one at delete time, so an image put back into a note
+// after the scan is kept.
+function UnusedImages({ gameId, apiBase }) {
+  const toast = useToast();
+  const [items, setItems]       = useState(null); // null until the first scan
+  const [scanning, setScanning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirm, setConfirm]   = useState(false);
+
+  useEffect(() => {
+    if (!confirm) return;
+    const t = setTimeout(() => setConfirm(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirm]);
+
+  const scan = async () => {
+    setScanning(true);
+    setConfirm(false);
+    try { setItems(await api.attachments.unused(gameId)); }
+    catch (err) { toast({ title: 'Scan failed', description: err.message, status: 'error', duration: 4000 }); }
+    finally { setScanning(false); }
+  };
+
+  const remove = async () => {
+    if (!confirm) { setConfirm(true); return; }
+    setConfirm(false);
+    setDeleting(true);
+    try {
+      const { deleted, freed, kept } = await api.attachments.deleteUnused(gameId, items.map(a => a.id));
+      toast({
+        title: `Deleted ${deleted} image${deleted === 1 ? '' : 's'} · freed ${formatBytes(freed)}`,
+        description: kept ? `${kept} kept — in use again since the scan.` : undefined,
+        status: 'success', duration: 4000,
+      });
+      setItems(await api.attachments.unused(gameId));
+    } catch (err) {
+      toast({ title: 'Delete failed', description: err.message, status: 'error', duration: 4000 });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const total = (items || []).reduce((n, a) => n + (Number(a.file_size) || 0), 0);
+
+  return (
+    <>
+      <HStack spacing={2} mb={items?.length ? 3 : 0}>
+        <Button size="xs" leftIcon={<FiSearch size={11} />} onClick={scan} isLoading={scanning}
+          style={{ background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', border: 'none' }}>
+          {items ? 'Scan again' : 'Scan'}
+        </Button>
+        {items?.length > 0 && (
+          <Button size="xs" leftIcon={<FiTrash2 size={11} />} onClick={remove} isLoading={deleting}
+            style={{
+              background: confirm ? 'var(--color-danger)' : 'var(--color-bg-subtle)',
+              color: confirm ? 'white' : 'var(--color-danger)', border: 'none',
+            }}>
+            {confirm
+              ? `Click again to delete ${items.length}`
+              : `Delete ${items.length} (${formatBytes(total)})`}
+          </Button>
+        )}
+        {items?.length === 0 && (
+          <Text fontSize="xs" style={{ color: 'var(--color-text-muted)' }}>No unused images.</Text>
+        )}
+      </HStack>
+      {items?.length > 0 && (
+        <Flex wrap="wrap" gap={2}>
+          {items.map(a => (
+            <Box key={a.id} title={a.original_name || a.url}
+              style={{ width: '96px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${apiBase}${a.url}`} alt={a.original_name || ''} loading="lazy"
+                style={{ width: '96px', height: '64px', objectFit: 'cover', display: 'block', background: 'var(--color-bg-subtle)' }} />
+              <Text fontSize="10px" px={1.5} py={0.5} noOfLines={1} style={{ color: 'var(--color-text-muted)' }}>
+                {SET_LABELS[a.set_type] ?? a.set_type} · {formatBytes(a.file_size)}
+              </Text>
+            </Box>
+          ))}
+        </Flex>
+      )}
+    </>
   );
 }
 
@@ -524,6 +621,15 @@ export default function GameSettingsPage({ params }) {
             >
               Add default
             </Button>
+          </Section>
+
+          {/* ── Unused Images ── */}
+          <Section
+            icon={FiHardDrive}
+            title="Unused Images"
+            description="Images uploaded to this game's notes and maps that nothing shows any more, such as replaced snapshots or images removed from a note. Deleting them frees disk space. Images still used by a note, a map, a map pin or a pinned bulletin are never listed; preset icons are not included."
+          >
+            <UnusedImages gameId={id} apiBase={apiBase} />
           </Section>
         </Box>
       )}

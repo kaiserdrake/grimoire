@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Children, cloneElement, isValidElement } from 'react';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiTrash2, FiX } from 'react-icons/fi';
+import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiTrash2, FiX, FiCopy, FiClipboard, FiCheck } from 'react-icons/fi';
 import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 
 // Custom react-markdown `table` renderer for note tables. Rows can be filtered by
@@ -20,7 +20,8 @@ import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 // `locked` (a locked note) keeps search, checkboxes, priority nudges, snapshots and
 // text-cell edits but turns off adding rows.
 // `onCaptureImage()` resolves to the markdown of a freshly captured image; without
-// it `:img` cells only show their thumbnails.
+// it `:img` cells only show their thumbnails. `onClearImage(start, end, expected)`,
+// when given, removes a cell's image (and deletes its file) instead of a plain edit.
 
 function matchesQuery(text, query) {
   const q = query.trim().toLowerCase();
@@ -164,30 +165,90 @@ function HoldToClear({ onClear, disabled }) {
 // A literal `|` would end the cell, so escape any the author typed unescaped.
 const escapeCellPipes = (text) => text.replace(/\\?\|/g, (m) => (m === '|' ? '\\|' : m));
 
-// Inline editor for one text cell. Enter or blur commits, Escape cancels.
+// Inline editor for one text cell. Enter or blur commits, Escape cancels. Copy and
+// Paste buttons sit beside it; they don't take focus, so using them keeps the
+// editor open. Paste needs the async clipboard API (HTTPS or localhost only), so
+// it's hidden where the browser doesn't offer clipboard reads.
+const canReadClipboard = () => typeof navigator !== 'undefined' && !!navigator.clipboard?.readText;
+
 function CellEditor({ initial, onCommit, onCancel }) {
   const [val, setVal] = useState(initial);
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef(null);
   const done = useRef(false);
   const finish = (commit) => {
     if (done.current) return;
     done.current = true;
     if (commit && val !== initial) onCommit(val); else onCancel();
   };
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  // Copies the selection, or the whole cell when nothing is selected.
+  const copy = async () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const { selectionStart: a, selectionEnd: b } = el;
+    const text = a !== b ? el.value.slice(a, b) : el.value;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // No async clipboard (plain-HTTP origin): copy through the input itself.
+      if (a === b) el.select();
+      document.execCommand('copy');
+      el.setSelectionRange(a, b);
+    }
+    setCopied(true);
+  };
+
+  // Inserts clipboard text at the cursor (replacing any selection). Cells are one
+  // line, so line breaks become spaces. execCommand keeps it undoable with Ctrl+Z.
+  const paste = async () => {
+    const el = inputRef.current;
+    if (!el) return;
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { return; }
+    text = text.replace(/\s*\r?\n\s*/g, ' ');
+    if (!text) return;
+    el.focus();
+    document.execCommand('insertText', false, text);
+  };
+
+  const keepFocus = (e) => e.preventDefault();
+
   return (
-    <input
-      className="md-cell-edit"
-      autoFocus
-      value={val}
-      size={Math.max(8, val.length + 1)}
-      onChange={(e) => setVal(e.target.value)}
-      onFocus={(e) => e.target.select()}
-      onBlur={() => finish(true)}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
-      }}
-    />
+    <span className="md-cell-edit-wrap" onClick={(e) => e.stopPropagation()}>
+      <input
+        ref={inputRef}
+        className="md-cell-edit"
+        autoFocus
+        value={val}
+        size={Math.max(8, val.length + 1)}
+        onChange={(e) => setVal(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        // A blur from the whole window losing focus (another app, or the browser's
+        // clipboard permission prompt) doesn't end the edit.
+        onBlur={() => { if (document.hasFocus()) finish(true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+        }}
+      />
+      <button type="button" className="md-cell-edit-btn" title={copied ? 'Copied' : 'Copy (selection or whole cell)'}
+        onMouseDown={keepFocus} onClick={copy}>
+        {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
+      </button>
+      {canReadClipboard() && (
+        <button type="button" className="md-cell-edit-btn" title="Paste from clipboard"
+          onMouseDown={keepFocus} onClick={paste}>
+          <FiClipboard size={11} />
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -197,7 +258,7 @@ export default function NoteTable({
   'data-sort-spec':    sortSpecAttr   = '',
   'data-row-template': rowTemplate    = '',
   'data-table-end':    tableEndAttr,
-  tableIndex, initialSearch, onSourceEdit: sourceEdit, onCaptureImage, locked, children, ...props
+  tableIndex, initialSearch, onSourceEdit: sourceEdit, onCaptureImage, onClearImage, locked, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
   const [lightbox, setLightbox] = useState(null);           // { src, alt }
@@ -218,10 +279,10 @@ export default function NoteTable({
   const setSort = (next) => setSortState(s => ({ ...s, pinned: null, chain: typeof next === 'function' ? next(s.chain) : next }));
   const displayOrder = useRef([]);
 
-  const onSourceEdit = sourceEdit && ((...args) => {
+  const pinOrder = () => {
     if (sort.length) setSortState(s => ({ ...s, pinned: s.pinned ?? displayOrder.current }));
-    sourceEdit(...args);
-  });
+  };
+  const onSourceEdit = sourceEdit && ((...args) => { pinOrder(); sourceEdit(...args); });
 
   const colKinds   = colKindsAttr ? colKindsAttr.split(',') : [];
   const searchCols = searchColsAttr ? searchColsAttr.split(',').map(Number) : [];
@@ -294,7 +355,9 @@ export default function NoteTable({
 
     const clear = () => {
       if (busy) return;
-      onSourceEdit(start, end, '', td.props['data-src-text'] ?? '');
+      const expected = td.props['data-src-text'] ?? '';
+      if (onClearImage) { pinOrder(); onClearImage(start, end, expected); }
+      else onSourceEdit(start, end, '', expected);
     };
 
     const capture = async (e) => {

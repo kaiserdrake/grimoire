@@ -286,7 +286,11 @@ export default function UserManagementModal({ isOpen, onClose }) {
                         </Td>
                         <Td minW="140px">
                           {isAdmin ? (
-                            <Text fontSize="xs" color="var(--color-text-muted)">No limit</Text>
+                            <Tooltip label={`${formatBytes(used)} used — admins have no storage limit`} placement="top">
+                              <Text fontSize="xs" color="var(--color-text-secondary)">
+                                {formatBytes(used)} <Text as="span" color="var(--color-text-muted)">· No limit</Text>
+                              </Text>
+                            </Tooltip>
                           ) : (
                             <Tooltip label={`${formatBytes(used)} of ${formatBytes(quota)} used`} placement="top">
                               <Box>

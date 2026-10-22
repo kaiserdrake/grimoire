@@ -1423,6 +1423,61 @@ app.delete('/api/attachments/:attachmentId', isAuthenticated, async (req, res) =
   }
 });
 
+// ── Unused attachments (settings cleanup) ─────────────────────────────────────
+// A notes/maps image of this game is unused when no map uses it as its image and
+// its URL appears nowhere a page could still show it: any of the user's notes,
+// map pins, games, bulletin posts or settings. Rows are matched as whole-row text
+// so a column added later is covered too. Preset icons ('icons') are left alone.
+const UNUSED_ATTACHMENT_WHERE = `
+  a.game_id = $1 AND a.user_id = $2 AND a.set_type IN ('notes', 'maps')
+  AND NOT EXISTS (SELECT 1 FROM game_maps m WHERE m.attachment_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM note_files n WHERE n.user_id = a.user_id AND strpos(n.content, a.url) > 0)
+  AND NOT EXISTS (SELECT 1 FROM map_pins p JOIN game_maps m ON m.id = p.map_id
+                  WHERE m.user_id = a.user_id AND strpos(p::text, a.url) > 0)
+  AND NOT EXISTS (SELECT 1 FROM games g WHERE strpos(g::text, a.url) > 0)
+  AND NOT EXISTS (SELECT 1 FROM bulletin_posts b WHERE strpos(b::text, a.url) > 0)
+  AND NOT EXISTS (SELECT 1 FROM user_settings us WHERE us.user_id = a.user_id AND strpos(us.value::text, a.url) > 0)
+`;
+
+app.get('/api/games/:gameId/attachments/unused', isAuthenticated, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT a.id, a.set_type, a.original_name, a.url, a.file_size, a.created_at
+       FROM game_attachments a WHERE ${UNUSED_ATTACHMENT_WHERE}
+       ORDER BY a.set_type, a.created_at`,
+      [req.params.gameId, req.user.id]
+    );
+    res.json(result.rows);
+  } catch {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
+// Deletes the given attachments — only those still unused at this moment, so an
+// image put back into a note since the scan is kept.
+app.delete('/api/games/:gameId/attachments/unused', isAuthenticated, async (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger);
+  if (ids.length === 0) return res.status(400).json({ message: 'ids must be a non-empty array.' });
+  try {
+    const result = await query(
+      `DELETE FROM game_attachments a WHERE ${UNUSED_ATTACHMENT_WHERE} AND a.id = ANY($3::int[])
+       RETURNING a.file_path, a.file_size`,
+      [req.params.gameId, req.user.id, ids]
+    );
+    let freed = 0;
+    for (const { file_path: filePath, file_size: size } of result.rows) {
+      freed += Number(size) || 0;
+      if (!path.resolve(filePath).startsWith(UPLOADS_ROOT + path.sep)) continue;
+      fs.unlink(filePath, (err) => {
+        if (err) console.error(`Failed to delete file ${filePath}:`, err);
+      });
+    }
+    res.json({ deleted: result.rows.length, freed, kept: ids.length - result.rows.length });
+  } catch {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
+
 // ── MAPS (scoped to playthrough) ──────────────────────────────────────────────
 
 // List maps — joins attachment to return the image URL (no more base64)

@@ -759,6 +759,19 @@ tr.notes-preview-line-active th:first-child {
   outline: none;
 }
 
+.md-cell-edit-wrap { display: inline-flex; align-items: center; gap: 0.2em; width: 100%; }
+.md-cell-edit-wrap .md-cell-edit { flex: 1; min-width: 0; }
+.md-cell-edit-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.7em; height: 1.7em; flex-shrink: 0; padding: 0;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.md-cell-edit-btn:hover { color: var(--color-accent); border-color: var(--color-accent); }
+
 /* ── Note tables: checkbox cells (`:check`) ── */
 .notes-preview-content td.md-td-check { text-align: center; }
 .md-cell-check {

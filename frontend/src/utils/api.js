@@ -116,6 +116,11 @@ export const api = {
       }),
 
     delete: (attachmentId) => apiFetch(`/api/attachments/${attachmentId}`, { method: 'DELETE' }),
+
+    // Notes/maps images of a game that nothing references any more (settings cleanup).
+    unused: (gameId) => apiFetch(`/api/games/${gameId}/attachments/unused`),
+    deleteUnused: (gameId, ids) =>
+      apiFetch(`/api/games/${gameId}/attachments/unused`, { method: 'DELETE', body: JSON.stringify({ ids }) }),
   },
 
   // Maps (scoped to playthrough)
