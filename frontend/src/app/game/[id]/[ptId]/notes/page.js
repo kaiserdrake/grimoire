@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare, FiColumns } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare, FiColumns, FiPlusSquare } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -49,6 +49,45 @@ function insertAtCursor(textarea, before, after = '', placeholder = '') {
   const newStart = start + before.length;
   const newEnd   = newStart + selected.length;
   textarea.setSelectionRange(newStart, newEnd);
+}
+
+// Insert a blank row below the table row holding the cursor (below the delimiter
+// when the cursor is on the header). Cells are seeded like the preview's "+ Row":
+// `[ ]` under `:check` columns, `-` under `:prio`. Returns false when the cursor
+// isn't inside a table.
+const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+function tableRowInsertion(text, caret) {
+  const lines = text.split('\n');
+  const at = text.slice(0, caret).split('\n').length - 1;
+  const isRow = (l) => l != null && l.trim() !== '' && l.includes('|');
+  if (!isRow(lines[at])) return null;
+  let start = at;
+  while (isRow(lines[start - 1])) start--;
+  let end = at;
+  while (isRow(lines[end + 1])) end++;
+  if (start + 1 > end || !TABLE_DELIM_RE.test(lines[start + 1])) return null;
+
+  const header = lines[start].trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '');
+  const cells = header.split(/(?<!\\)\|/).map((cell) => (
+    /:(check|checkbox)(?![a-z0-9])/i.test(cell) ? '[ ]'
+      : /:(prio|priority)(?![a-z0-9])/i.test(cell) ? '-'
+      : ''
+  ));
+  const row = `| ${cells.join(' | ')} |`;
+  const afterLine = Math.max(at, start + 1);
+  const insertAt = lines.slice(0, afterLine + 1).reduce((n, l) => n + l.length + 1, 0) - 1;
+  return { insertAt, insert: `\n${row}`, caret: insertAt + 3 };
+}
+
+function insertTableRow(textarea) {
+  const res = tableRowInsertion(textarea.value, textarea.selectionStart);
+  if (!res) return false;
+  textarea.focus();
+  textarea.setSelectionRange(res.insertAt, res.insertAt);
+  document.execCommand('insertText', false, res.insert);
+  textarea.setSelectionRange(res.caret, res.caret);
+  return true;
 }
 
 // Inline React component to render a single button (used in picker)
@@ -502,6 +541,9 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       ' | [ ] | Medium |  |\n',
       'First task'
     )},
+    { icon: <FiPlusSquare size={12} />, label: 'Add table row (cursor in a table)', action: () => {
+      if (textareaRef.current && insertTableRow(textareaRef.current)) onChange(textareaRef.current.value);
+    }},
     { icon: <FiLayers size={12} />, label: 'Insert tier list', action: () => apply(
       '\n```tier\nS: \nA: \nB: \nC: \nD: \nUnranked: \n```\n'
     )},
