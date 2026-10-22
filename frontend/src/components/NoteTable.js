@@ -197,7 +197,7 @@ export default function NoteTable({
   'data-sort-spec':    sortSpecAttr   = '',
   'data-row-template': rowTemplate    = '',
   'data-table-end':    tableEndAttr,
-  tableIndex, initialSearch, onSourceEdit, onCaptureImage, locked, children, ...props
+  tableIndex, initialSearch, onSourceEdit: sourceEdit, onCaptureImage, locked, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
   const [lightbox, setLightbox] = useState(null);           // { src, alt }
@@ -206,12 +206,22 @@ export default function NoteTable({
   // Clicking headers overrides the `:sortN` tokens, but editing those tokens in the
   // markdown re-seeds the chain — otherwise the author's change would do nothing
   // until the table remounted.
-  const [sortState, setSortState] = useState(() => ({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr) }));
+  //
+  // `pinned` freezes the row order (document indexes, as displayed) once a control
+  // in a sorted table edits the source, so ticking a checkbox or nudging a priority
+  // doesn't make the row jump. Choosing a sort again releases it.
+  const [sortState, setSortState] = useState(() => ({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr), pinned: null }));
   if (sortState.spec !== sortSpecAttr) {
-    setSortState({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr) });
+    setSortState({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr), pinned: null });
   }
   const sort = sortState.chain;
-  const setSort = (next) => setSortState(s => ({ ...s, chain: typeof next === 'function' ? next(s.chain) : next }));
+  const setSort = (next) => setSortState(s => ({ ...s, pinned: null, chain: typeof next === 'function' ? next(s.chain) : next }));
+  const displayOrder = useRef([]);
+
+  const onSourceEdit = sourceEdit && ((...args) => {
+    if (sort.length) setSortState(s => ({ ...s, pinned: s.pinned ?? displayOrder.current }));
+    sourceEdit(...args);
+  });
 
   const colKinds   = colKindsAttr ? colKindsAttr.split(',') : [];
   const searchCols = searchColsAttr ? searchColsAttr.split(',').map(Number) : [];
@@ -245,7 +255,9 @@ export default function NoteTable({
       {
         key: th.key,
         className: cx(th.props.className, 'md-th-sortable', entry && 'md-th-sorted'),
-        onClick: (e) => toggleSort(ci, e.shiftKey),
+        // The second click of a double-click doesn't count, so double-clicking a
+        // header doesn't flip the sort to descending by accident.
+        onClick: (e) => { if (e.detail <= 1) toggleSort(ci, e.shiftKey); },
         title: `Sort ${sortHint(colKinds[ci], entry ? nextDir : 'asc')}` +
                ' — shift-click to add to the sort chain',
       },
@@ -404,12 +416,12 @@ export default function NoteTable({
     ? elementsOf(tbody.props.children).map((tr, i) => ({ tr, i, cells: elementsOf(tr.props.children) }))
     : [];
 
-  if (query.trim() && searchCols.length) {
-    const haystack = (row) => searchCols.map(c => sortText(row.cells[c])).join('   ').toLowerCase();
-    rows = rows.filter(row => matchesQuery(haystack(row), query));
-  }
-
-  if (sort.length) {
+  const { pinned } = sortState;
+  if (pinned) {
+    // Frozen order; rows that weren't there when it froze (just added) go last.
+    const pos = new Map(pinned.map((i, k) => [i, k]));
+    rows = [...rows].sort((a, b) => (pos.get(a.i) ?? Infinity) - (pos.get(b.i) ?? Infinity) || a.i - b.i);
+  } else if (sort.length) {
     rows = [...rows].sort((a, b) => {
       for (const { col, dir } of sort) {
         const c = compareCells(a.cells[col], b.cells[col], dir);
@@ -417,6 +429,12 @@ export default function NoteTable({
       }
       return a.i - b.i; // stable: fall back to document order
     });
+  }
+  displayOrder.current = rows.map(r => r.i);
+
+  if (query.trim() && searchCols.length) {
+    const haystack = (row) => searchCols.map(c => sortText(row.cells[c])).join('   ').toLowerCase();
+    rows = rows.filter(row => matchesQuery(haystack(row), query));
   }
 
   const renderedBody = tbody && cloneElement(

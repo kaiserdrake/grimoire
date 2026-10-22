@@ -8,7 +8,7 @@ import {
   ModalFooter, VStack,
 } from '@chakra-ui/react';
 import { ChevronRightIcon, ChevronDownIcon } from '@chakra-ui/icons';
-import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare, FiColumns, FiPlusSquare } from 'react-icons/fi';
+import { FiSave, FiPlus, FiTrash2, FiFileText, FiFolder, FiHelpCircle, FiBold, FiItalic, FiCode, FiList, FiMinus, FiImage, FiUpload, FiLink, FiGrid, FiEye, FiEdit3, FiMap, FiTag, FiSearch, FiLayers, FiLock, FiUnlock, FiCamera, FiCopy, FiCheckSquare, FiColumns, FiPlusSquare, FiSidebar, FiCheckCircle } from 'react-icons/fi';
 import { BsController } from 'react-icons/bs';
 import { TbPin } from 'react-icons/tb';
 import ReactMarkdown from 'react-markdown';
@@ -51,15 +51,16 @@ function insertAtCursor(textarea, before, after = '', placeholder = '') {
   textarea.setSelectionRange(newStart, newEnd);
 }
 
-// Insert a blank row below the table row holding the cursor (below the delimiter
-// when the cursor is on the header). Cells are seeded like the preview's "+ Row":
-// `[ ]` under `:check` columns, `-` under `:prio`. Returns false when the cursor
-// isn't inside a table.
+// ── Table row / column insertion ─────────────────────────────────────────────
+// Used by the toolbar's "Add table row/column" — on a textarea at the cursor, or in
+// render-edit on the table cell last clicked in the preview. Both work on lines of
+// the markdown source; `at` is the 0-based line the cursor / clicked row is on.
 const TABLE_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 
-function tableRowInsertion(text, caret) {
-  const lines = text.split('\n');
-  const at = text.slice(0, caret).split('\n').length - 1;
+const lineOffset = (lines, i) => lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0);
+
+// The table (header line index `start`, last row `end`) that line `at` belongs to.
+function findTableBlock(lines, at) {
   const isRow = (l) => l != null && l.trim() !== '' && l.includes('|');
   if (!isRow(lines[at])) return null;
   let start = at;
@@ -67,26 +68,91 @@ function tableRowInsertion(text, caret) {
   let end = at;
   while (isRow(lines[end + 1])) end++;
   if (start + 1 > end || !TABLE_DELIM_RE.test(lines[start + 1])) return null;
+  return { start, end };
+}
 
-  const header = lines[start].trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '');
+// Offsets of the pipes that separate cells (escaped `\|` excluded).
+const pipePositions = (line) => [...line.matchAll(/(?<!\\)\|/g)].map(m => m.index);
+
+// Index of the cell `col` points into on `line` (0-based, ignoring a leading pipe).
+function cellIndexAt(line, col) {
+  const pipes = pipePositions(line);
+  const lead = line.trim().startsWith('|') ? 1 : 0;
+  return Math.max(0, pipes.filter(p => p < col).length - lead);
+}
+
+// Insert a blank row below line `at` (below the delimiter when `at` is the header).
+// Cells are seeded like the preview's "+ Row": `[ ]` under `:check` columns, `-`
+// under `:prio`.
+function tableRowInsertion(text, at) {
+  const lines = text.split('\n');
+  const t = findTableBlock(lines, at);
+  if (!t) return null;
+  const header = lines[t.start].trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '');
   const cells = header.split(/(?<!\\)\|/).map((cell) => (
     /:(check|checkbox)(?![a-z0-9])/i.test(cell) ? '[ ]'
       : /:(prio|priority)(?![a-z0-9])/i.test(cell) ? '-'
       : ''
   ));
-  const row = `| ${cells.join(' | ')} |`;
-  const afterLine = Math.max(at, start + 1);
-  const insertAt = lines.slice(0, afterLine + 1).reduce((n, l) => n + l.length + 1, 0) - 1;
-  return { insertAt, insert: `\n${row}`, caret: insertAt + 3 };
+  const after = Math.max(at, t.start + 1);
+  const insertAt = lineOffset(lines, after + 1) - 1;
+  return { insertAt, insert: `\n| ${cells.join(' | ')} |`, caret: insertAt + 3 };
 }
 
+// Insert a column to the right of cell `cell` on every line of the table holding
+// line `at`. `kind: 'check'` makes it a `:check` column of unticked `[ ]` boxes.
+// Returns the table's source range, its replacement, and the range of the new
+// header's name (so it can be selected for renaming).
+function tableColumnInsertion(text, at, cell, kind = 'text') {
+  const lines = text.split('\n');
+  const t = findTableBlock(lines, at);
+  if (!t) return null;
+  const NAME = kind === 'check' ? 'Done' : 'New column';
+  const header = kind === 'check' ? `${NAME} :check` : NAME;
+  const blank = kind === 'check' ? '[ ]' : '';
+  let nameAt = 0;
+  const out = lines.slice(t.start, t.end + 1).map((line, i) => {
+    const value = i === 0 ? header : i === 1 ? '---' : blank;
+    const pipes = pipePositions(line);
+    const lead = line.trim().startsWith('|') ? 1 : 0;
+    const endPipe = pipes[cell + lead];
+    if (endPipe == null) {
+      // Short row or no trailing pipe: append as the last cell.
+      const base = line.replace(/\s+$/, '');
+      if (i === 0) nameAt = base.length + 3;
+      return base.endsWith('|') ? `${base} ${value} |` : `${base} | ${value}`;
+    }
+    if (i === 0) nameAt = endPipe + 2;
+    return `${line.slice(0, endPipe + 1)} ${value} |${line.slice(endPipe + 1)}`;
+  });
+  const start = lineOffset(lines, t.start);
+  const end = lineOffset(lines, t.end) + lines[t.end].length;
+  return { start, end, replacement: out.join('\n'), select: [start + nameAt, start + nameAt + NAME.length] };
+}
+
+// Textarea wrappers: edit through execCommand so Ctrl+Z undoes them.
+const caretLine = (ta) => ta.value.slice(0, ta.selectionStart).split('\n').length - 1;
+
 function insertTableRow(textarea) {
-  const res = tableRowInsertion(textarea.value, textarea.selectionStart);
+  const res = tableRowInsertion(textarea.value, caretLine(textarea));
   if (!res) return false;
   textarea.focus();
   textarea.setSelectionRange(res.insertAt, res.insertAt);
   document.execCommand('insertText', false, res.insert);
   textarea.setSelectionRange(res.caret, res.caret);
+  return true;
+}
+
+function insertTableColumn(textarea, kind) {
+  const at = caretLine(textarea);
+  const lines = textarea.value.split('\n');
+  const col = textarea.selectionStart - lineOffset(lines, at);
+  const res = tableColumnInsertion(textarea.value, at, cellIndexAt(lines[at] ?? '', col), kind);
+  if (!res) return false;
+  textarea.focus();
+  textarea.setSelectionRange(res.start, res.end);
+  document.execCommand('insertText', false, res.replacement);
+  textarea.setSelectionRange(...res.select);
   return true;
 }
 
@@ -485,8 +551,10 @@ function extractHeadings(markdown) {
 // (render-edit opens a new block first when none is being edited, or applies an
 // inline `wrap` such as bold straight to text selected in the preview). `onPopover(open)` reports a
 // picker opening/closing, so render-edit can keep its block open meanwhile.
+// `onPreviewTable(kind)` handles "Add table row/column" when there's no textarea
+// to act on (render-edit), using the table cell last clicked in the preview.
 function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, iconGroups, apiBase,
-  ensureTarget = (fn) => fn(), onPopover }) {
+  ensureTarget = (fn) => fn(), onPopover, onPreviewTable }) {
   const apply = (before, after = '', placeholder = '') => ensureTarget(() => {
     if (!textareaRef.current) return;
     insertAtCursor(textareaRef.current, before, after, placeholder);
@@ -494,6 +562,15 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
   }, after ? { before, after } : null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+
+  const tableAction = (kind) => {
+    const ta = textareaRef.current;
+    if (ta?.tagName === 'TEXTAREA') {
+      if (kind === 'row' ? insertTableRow(ta) : insertTableColumn(ta, kind)) onChange(ta.value);
+      return;
+    }
+    onPreviewTable?.(kind);
+  };
 
   const openPicker = (setOpen) => ensureTarget(() => { onPopover?.(true); setOpen(true); });
   const closePicker = (setOpen) => { setOpen(false); onPopover?.(false); };
@@ -541,9 +618,9 @@ function MarkdownToolbar({ textareaRef, onChange, onOpenImageModal, platform, ic
       ' | [ ] | Medium |  |\n',
       'First task'
     )},
-    { icon: <FiPlusSquare size={12} />, label: 'Add table row (cursor in a table)', action: () => {
-      if (textareaRef.current && insertTableRow(textareaRef.current)) onChange(textareaRef.current.value);
-    }},
+    { icon: <FiPlusSquare size={12} />, label: 'Add table row below the current row', action: () => tableAction('row') },
+    { icon: <FiSidebar size={12} style={{ transform: 'scaleX(-1)' }} />, label: 'Add table column right of the current column', action: () => tableAction('text') },
+    { icon: <FiCheckCircle size={12} />, label: 'Add checkbox column (Done :check) right of the current column', action: () => tableAction('check') },
     { icon: <FiLayers size={12} />, label: 'Insert tier list', action: () => apply(
       '\n```tier\nS: \nA: \nB: \nC: \nD: \nUnranked: \n```\n'
     )},
@@ -927,7 +1004,9 @@ export default function NotesPage({ params }) {
 
   // In Present mode there's no editor caret, so let a click on the preview move
   // the row highlight to the clicked block.
+  const lastCellRef = useRef(null); // table cell last clicked in the preview
   const handlePreviewClick = useCallback((e) => {
+    lastCellRef.current = e.target.closest?.('td, th') ?? null;
     if (!isPresentMode) return;
     const el = e.target.closest?.('[data-source-line]');
     if (!el) return;
@@ -1091,6 +1170,10 @@ export default function NotesPage({ params }) {
   // persist via the normal debounced save. Reads the live content from a ref so the
   // callback identity survives typing — see markdownComponents below.
   const applySourceChange = useCallback((next) => {
+    // Update the ref now, not on the next render, so a second preview edit in the
+    // same tick (e.g. a cell editor committing just before a table insert) builds
+    // on this one instead of the stale text.
+    contentRef.current = next;
     setContent(next);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => save(next), 2000);
@@ -1227,6 +1310,36 @@ export default function NotesPage({ params }) {
     pendingToolRef.current = fn;
     setEditBlock({ append: true });
   }, [toolTargetRef, wrapPreviewSelection]);
+  // Render-edit "Add table row/column" (kind 'row' | 'text' | 'check') with no editor open: act on the table cell
+  // that's focused (cell editor), holds the selection, or was last clicked.
+  const previewTableAction = useCallback((kind) => {
+    const root = previewRef.current;
+    const inPreview = (el) => el && el.isConnected && root?.contains(el);
+    const active = document.activeElement;
+    const editing = inPreview(active) && active.matches?.('.md-cell-edit') ? active : null;
+    const anchor = window.getSelection?.()?.anchorNode;
+    const anchorEl = anchor && (anchor.nodeType === 1 ? anchor : anchor.parentElement);
+    const cell = [editing?.closest('td, th'), anchorEl?.closest?.('td, th'), lastCellRef.current]
+      .find(inPreview);
+    const line = Number(cell?.closest('tr')?.getAttribute('data-source-line'));
+    if (!cell || !line) {
+      toast({ title: 'Click a table cell first', status: 'info', duration: 2500 });
+      return;
+    }
+    const col = cell.cellIndex;
+    editing?.blur(); // commits a pending cell edit first
+
+    const cur = contentRef.current;
+    if (kind === 'row') {
+      const r = tableRowInsertion(cur, line - 1);
+      if (r) { applySourceChange(cur.slice(0, r.insertAt) + r.insert + cur.slice(r.insertAt)); return; }
+    } else {
+      const r = tableColumnInsertion(cur, line - 1, col, kind);
+      if (r) { applySourceChange(cur.slice(0, r.start) + r.replacement + cur.slice(r.end)); return; }
+    }
+    toast({ title: 'Could not find that table in the markdown', status: 'warning', duration: 3000 });
+  }, [applySourceChange, toast]);
+
   const handleBlockReady = useCallback(() => {
     const fn = pendingToolRef.current;
     pendingToolRef.current = null;
@@ -1658,6 +1771,7 @@ export default function NotesPage({ params }) {
                   onOpenImageModal={() => ensureBlockTarget(() => { holdBlock(true); setImageModalOpen(true); })}
                   ensureTarget={ensureBlockTarget}
                   onPopover={holdBlock}
+                  onPreviewTable={previewTableAction}
                   platform={gamepad}
                   iconGroups={iconGroups}
                   apiBase={apiBase}
