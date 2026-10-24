@@ -718,6 +718,22 @@ tr.notes-preview-line-active th:first-child {
 .md-table-search:focus { border-color: var(--color-accent); }
 .md-table-search::placeholder { color: var(--color-text-muted); }
 
+/* ── Note tables: filter / hide-done controls above the table ── */
+.md-table-controls { display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap; }
+.md-table-controls .md-table-search-wrap { flex: 1 1 180px; }
+.md-table-done-toggle {
+  display: inline-flex; align-items: center; gap: 0.3em;
+  padding: 0.2em 0.55em;
+  font-size: 0.75rem; line-height: 1.4; white-space: nowrap;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.md-table-done-toggle:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.md-table-done-toggle.active { color: var(--color-accent); background: var(--color-accent-subtle); border-color: var(--color-accent); }
+
 /* ── Note tables: append an empty row ── */
 .md-table-add-row {
   display: inline-flex; align-items: center; gap: 0.25em;
@@ -731,6 +747,8 @@ tr.notes-preview-line-active th:first-child {
 }
 .md-table-wrap:hover .md-table-add-row { opacity: 1; }
 .md-table-add-row:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.md-table-footer { display: flex; align-items: center; gap: 0.4em; }
+.md-table-add-row.active { opacity: 1; color: var(--color-accent); border-style: solid; border-color: var(--color-accent); background: var(--color-accent-subtle); }
 
 /* ── Note tables: sortable headers ── (see utils/noteTables.js) */
 .notes-preview-content th.md-th-sortable { cursor: pointer; user-select: none; }

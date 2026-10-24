@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Children, cloneElement, isValidElement } from 'react';
 import { createPortal } from 'react-dom';
-import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiTrash2, FiX, FiCopy, FiClipboard, FiCheck } from 'react-icons/fi';
+import { FiSearch, FiChevronUp, FiChevronDown, FiPlus, FiCamera, FiTrash2, FiX, FiCopy, FiClipboard, FiCheck, FiEye, FiEyeOff } from 'react-icons/fi';
 import { priorityByRank, MAX_PRIORITY_RANK } from '@/utils/noteTables';
 
 // Custom react-markdown `table` renderer for note tables. Rows can be filtered by
@@ -258,9 +258,16 @@ export default function NoteTable({
   'data-sort-spec':    sortSpecAttr   = '',
   'data-row-template': rowTemplate    = '',
   'data-table-end':    tableEndAttr,
+  'data-done-col':     doneColAttr    = '-1',
+  'data-hide-done':    hideDoneAttr   = '0',
+  'data-reverse':      reverseAttr    = '0',
   tableIndex, initialSearch, onSourceEdit: sourceEdit, onCaptureImage, onClearImage, locked, children, ...props
 }) {
   const [query, setQuery] = useState(initialSearch ?? '');
+  // Hide rows ticked in the "done" `:check` column. Seeded by a `:hidedone` header
+  // tag and re-seeded when that tag is edited; the toggle itself never edits the note.
+  const [doneView, setDoneView] = useState(() => ({ seed: hideDoneAttr, hide: hideDoneAttr === '1' }));
+  if (doneView.seed !== hideDoneAttr) setDoneView({ seed: hideDoneAttr, hide: hideDoneAttr === '1' });
   const [lightbox, setLightbox] = useState(null);           // { src, alt }
   const [capturing, setCapturing] = useState(() => new Set()); // src-start of cells mid-capture
   const [editing, setEditing] = useState(null);             // src-start of the text cell being edited
@@ -271,11 +278,24 @@ export default function NoteTable({
   // `pinned` freezes the row order (document indexes, as displayed) once a control
   // in a sorted table edits the source, so ticking a checkbox or nudging a priority
   // doesn't make the row jump. Choosing a sort again releases it.
-  const [sortState, setSortState] = useState(() => ({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr), pinned: null }));
-  if (sortState.spec !== sortSpecAttr) {
-    setSortState({ spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr), pinned: null });
+  //
+  // `reverse` shows document order bottom-to-top (and breaks sort ties that way);
+  // seeded by a `:reverse` header tag, flipped by the Reverse toggle.
+  const [sortState, setSortState] = useState(() => ({
+    spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr), pinned: null,
+    revSeed: reverseAttr, reverse: reverseAttr === '1',
+  }));
+  if (sortState.spec !== sortSpecAttr || sortState.revSeed !== reverseAttr) {
+    setSortState(s => ({
+      ...s,
+      ...(s.spec !== sortSpecAttr && { spec: sortSpecAttr, chain: parseSortSpec(sortSpecAttr) }),
+      ...(s.revSeed !== reverseAttr && { revSeed: reverseAttr, reverse: reverseAttr === '1' }),
+      pinned: null,
+    }));
   }
   const sort = sortState.chain;
+  const { reverse } = sortState;
+  const toggleReverse = () => setSortState(s => ({ ...s, reverse: !s.reverse, pinned: null }));
   const setSort = (next) => setSortState(s => ({ ...s, pinned: null, chain: typeof next === 'function' ? next(s.chain) : next }));
   const displayOrder = useRef([]);
 
@@ -490,10 +510,17 @@ export default function NoteTable({
         const c = compareCells(a.cells[col], b.cells[col], dir);
         if (c) return c;
       }
-      return a.i - b.i; // stable: fall back to document order
+      return reverse ? b.i - a.i : a.i - b.i; // stable: fall back to document order
     });
+  } else if (reverse) {
+    rows = [...rows].reverse();
   }
   displayOrder.current = rows.map(r => r.i);
+
+  const doneCol = Number(doneColAttr);
+  const isDone = (row) => row.cells[doneCol]?.props?.['data-checked'] === '1';
+  const doneCount = doneCol >= 0 ? rows.filter(isDone).length : 0;
+  if (doneCol >= 0 && doneView.hide) rows = rows.filter(row => !isDone(row));
 
   if (query.trim() && searchCols.length) {
     const haystack = (row) => searchCols.map(c => sortText(row.cells[c])).join('   ').toLowerCase();
@@ -523,27 +550,53 @@ export default function NoteTable({
     </>
   );
 
-  if (!searchCols.length && !canAddRow) return table;
+  const showDoneToggle = doneCol >= 0;
+  // Reverse is offered on the notes page (not read-only previews) once there's an
+  // order to flip.
+  const showReverse = !!sourceEdit && (displayOrder.current.length > 1 || reverse);
+  if (!searchCols.length && !canAddRow && !showDoneToggle && !showReverse) return table;
 
   return (
     <div className="md-table-wrap">
-      {searchCols.length > 0 && (
-        <div className="md-table-search-wrap">
-          <FiSearch size={13} className="md-table-search-icon" />
-          <input
-            className="md-table-search"
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter rows…"
-          />
+      {(searchCols.length > 0 || showDoneToggle) && (
+        <div className="md-table-controls">
+          {searchCols.length > 0 && (
+            <div className="md-table-search-wrap">
+              <FiSearch size={13} className="md-table-search-icon" />
+              <input
+                className="md-table-search"
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter rows…"
+              />
+            </div>
+          )}
+          {showDoneToggle && (
+            <button type="button" className={cx('md-table-done-toggle', doneView.hide && 'active')}
+              onClick={() => setDoneView(v => ({ ...v, hide: !v.hide }))}
+              title={doneView.hide ? 'Show rows that are ticked done' : 'Hide rows that are ticked done'}>
+              {doneView.hide ? <FiEye size={11} /> : <FiEyeOff size={11} />}
+              {doneView.hide ? `Show done (${doneCount})` : `Hide done (${doneCount})`}
+            </button>
+          )}
         </div>
       )}
       {table}
-      {canAddRow && (
-        <button type="button" className="md-table-add-row" onClick={addRow} title="Append an empty row">
-          <FiPlus size={11} /> Row
-        </button>
+      {(canAddRow || showReverse) && (
+        <div className="md-table-footer">
+          {canAddRow && (
+            <button type="button" className="md-table-add-row" onClick={addRow} title="Append an empty row">
+              <FiPlus size={11} /> Row
+            </button>
+          )}
+          {showReverse && (
+            <button type="button" className={cx('md-table-add-row', reverse && 'active')} onClick={toggleReverse}
+              title={reverse ? 'Showing bottom-to-top — click for document order' : 'Show rows bottom-to-top (newest first)'}>
+              <span aria-hidden="true">⇅</span> {reverse ? 'Reversed' : 'Reverse'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

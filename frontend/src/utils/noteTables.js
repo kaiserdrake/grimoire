@@ -10,6 +10,10 @@
 //                  screen) with a camera button that snaps one from the camera
 //   :sort[n][dir]  initial sort; `n` is the position in the multi-sort chain and
 //                  `dir` is asc (default) or desc — e.g. `:sort1` `:sort2desc`
+//   :hidedone      on a `:check` column: rows ticked in it start hidden (the
+//                  table's Hide/Show done toggle flips this per view)
+//   :reverse       on any header cell: rows start in reverse (bottom-to-top)
+//                  order — newest first for tables appended to with "+ Row"
 //
 // Every table also carries the offset of its last row plus a blank-row template,
 // so the rendered table can append an empty row without the author hand-typing the
@@ -71,7 +75,7 @@ const IMAGE_TOKEN_RE = /!\[[^\]]*\]\([^)]*\)/;
 
 // Header tokens. The trailing lookahead keeps `:searching` from matching `:search`.
 const HEADER_TOKEN_RE =
-  /:(search|checkbox|check|priority|prio|image|img|sort)(\d*)(?:[-_]?(asc|desc))?(?![a-z0-9])/gi;
+  /:(search|checkbox|check|priority|prio|image|img|sort|hidedone|reverse)(\d*)(?:[-_]?(asc|desc))?(?![a-z0-9])/gi;
 
 // Tokens handled by sibling plugins — excluded from a cell's sort text so a cell
 // of icons doesn't sort by its raw `:icon[…]` markup.
@@ -113,7 +117,7 @@ function setProps(node, props) {
 
 // ── Header parsing ────────────────────────────────────────────────────────────
 function readHeaderConfig(cell) {
-  const cfg = { search: false, kind: null, sortRank: null, sortDir: 'asc' };
+  const cfg = { search: false, kind: null, sortRank: null, sortDir: 'asc', hideDone: false, reverse: false };
   forEachTextNode(cell, (t) => {
     t.value = t.value.replace(HEADER_TOKEN_RE, (_full, name, digits, dir) => {
       switch (name.toLowerCase()) {
@@ -128,6 +132,8 @@ function readHeaderConfig(cell) {
           cfg.sortRank = digits ? Number(digits) : 1;
           if (dir) cfg.sortDir = dir.toLowerCase();
           break;
+        case 'hidedone': cfg.hideDone = true; break;
+        case 'reverse':  cfg.reverse = true; break;
       }
       return '';
     });
@@ -235,8 +241,16 @@ function enhanceTable(node, src) {
   // their neutral token so the new row renders with a checkbox / priority pill.
   const rowTemplate = `| ${cols.map(c => (c.kind === 'check' ? '[ ]' : c.kind === 'prio' ? '-' : '')).join(' | ')} |`;
 
+  // The `:check` column that decides whether a row is "done": the one tagged
+  // `:hidedone`, else the first `:check` column.
+  const taggedDoneCol = cols.findIndex(c => c.kind === 'check' && c.hideDone);
+  const doneCol = taggedDoneCol !== -1 ? taggedDoneCol : cols.findIndex(c => c.kind === 'check');
+
   setProps(node, {
     'data-note-table': 'true',
+    'data-done-col': String(doneCol),
+    'data-hide-done': taggedDoneCol !== -1 ? '1' : '0',
+    'data-reverse': cols.some(c => c.reverse) ? '1' : '0',
     'data-col-kinds': cols.map(c => c.kind || 'text').join(','),
     'data-search-cols': cols.map((c, i) => (c.search ? i : -1)).filter(i => i >= 0).join(','),
     'data-sort-spec': sortSpec,

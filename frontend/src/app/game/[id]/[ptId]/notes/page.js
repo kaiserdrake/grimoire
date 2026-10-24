@@ -672,6 +672,8 @@ function MarkdownHelpModal({ isOpen, onClose }) {
     { heading: 'Table headers',   rows: [
       ['| Name :search |','Filter box for this column'],
       ['| Done :check |','Cells hold [ ] / [x] as checkboxes'],
+      ['| Done :check :hidedone |','Ticked rows start hidden (Hide/Show done toggle)'],
+      ['| Date :reverse |','Rows start bottom-to-top (Reverse toggle)'],
       ['| Priority :prio |','Cells hold Critical…Low with ▲▼ controls'],
       ['| Snapshot :img |','Image thumbnails + one-click camera snapshot'],
       ['| Done :sort1 |','Sort by this column first'],
