@@ -16,7 +16,8 @@ import { TAG_CONFIG, BacklogIcon, WishlistIcon, FavoriteIcon, DroppedIcon } from
 function TagToggle({ value, onChange }) {
   return (
     <HStack spacing={1} flexWrap="wrap">
-      {Object.entries(TAG_CONFIG).map(([key, cfg]) => (
+      {/* 'playing' is a playthrough status, not a game tag (the DB enum rejects it). */}
+      {Object.entries(TAG_CONFIG).filter(([key]) => key !== 'playing').map(([key, cfg]) => (
         <Box
           key={key}
           as="button"
