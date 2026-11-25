@@ -163,6 +163,14 @@ function defaultTierDate(game, tier) {
   return '';
 }
 
+// "Newly added": created in the last NEW_GAME_DAYS days and no playthrough yet.
+// Once a playthrough is started the game falls back into its normal category.
+const NEW_GAME_DAYS = 7;
+function isNewlyAdded(game) {
+  if ((game.playthroughs ?? []).length > 0 || !game.created_at) return false;
+  return Date.now() - new Date(game.created_at).getTime() < NEW_GAME_DAYS * 86400000;
+}
+
 function releaseDate(game) {
   return game.releases?.[0]?.date || '';
 }
@@ -248,6 +256,9 @@ export default function HomePage() {
     .filter((g) => {
       if (search && !g.title.toLowerCase().includes(search.toLowerCase())) return false;
 
+      // Newly added games always show, so a just-added game never vanishes behind a filter.
+      if (isNewlyAdded(g)) return true;
+
       const pts = g.playthroughs ?? [];
       const statuses = new Set(pts.map((p) => p.status));
 
@@ -264,6 +275,12 @@ export default function HomePage() {
       return false;
   })
   .sort((a, b) => {
+    // Newly added games come first (newest first) in every sort mode.
+    const aNew = isNewlyAdded(a);
+    const bNew = isNewlyAdded(b);
+    if (aNew !== bNew) return aNew ? -1 : 1;
+    if (aNew && bNew) return new Date(b.created_at) - new Date(a.created_at);
+
     if (sortBy === 'default') {
       const aTier = defaultTier(a);
       const bTier = defaultTier(b);
@@ -304,6 +321,7 @@ export default function HomePage() {
   // Same tiers as the Default sort; favorites count as completed.
   const ptStatuses = (g) => new Set((g.playthroughs ?? []).map((p) => p.status));
   const GROUP_ORDER = [
+    { key: 'new',       label: 'NEWLY ADDED', test: isNewlyAdded },
     { key: 'playing',   label: 'PLAYING',   test: (g) => ptStatuses(g).has('playing') },
     { key: 'wishlist',  label: 'WISHLIST',  test: (g) => g.tag === 'wishlist' },
     { key: 'pend',      label: 'PENDED',    test: (g) => ptStatuses(g).has('pend') },

@@ -546,6 +546,9 @@ app.get('/api/games', isAuthenticated, async (req, res) => {
 app.post('/api/games', isAuthenticated, async (req, res) => {
   const { igdb_id, title, cover_url, summary, genres, series, developer, publisher, time_to_beat, releases, tag, rating, aggregated_rating } = req.body;
   if (!title) return res.status(400).json({ message: 'Title is required.' });
+  if (tag != null && !['wishlist', 'backlog', 'favorite', 'dropped'].includes(tag)) {
+    return res.status(400).json({ message: 'Invalid tag.' });
+  }
   const userId = req.user.id;
   try {
     const result = await query(
